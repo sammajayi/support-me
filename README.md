@@ -13,7 +13,7 @@ A static, shareable donation page built on the Stellar blockchain testnet. Allow
 - **Real-time Feedback**: Transaction success/failure notifications with hashes
 - **Dashboard**: Track incoming donations (planned)
 - **Stellar Testnet**: Safe, fast, low-cost transactions
-- **Responsive Design**: Mobile-friendly UI with custom design tokens
+- **Responsive Design**: Mobile-friendly UI w
 
 ## Tech Stack
 
@@ -35,7 +35,7 @@ A static, shareable donation page built on the Stellar blockchain testnet. Allow
 │   ├── lib/                # Utility libraries
 │   └── types/              # TypeScript types
 ├── PRD.md                  # Product Requirements Document
-└── README.md               # This file
+└── README.md               
 ```
 
 ## Installation
