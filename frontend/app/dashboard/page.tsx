@@ -1,0 +1,208 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useAuth } from '@/context/AuthContext';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
+
+interface Creator {
+  id: number;
+  username: string;
+  displayName: string;
+  walletAddress: string;
+}
+
+interface Donation {
+  id: number;
+  senderAddress: string;
+  amount: number;
+  currency: string;
+  message: string;
+  transactionHash: string;
+  createdAt: string;
+}
+
+export default function DashboardPage() {
+  const { user, token } = useAuth();
+  const [creator, setCreator] = useState<Creator | null>(null);
+  const [donations, setDonations] = useState<Donation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchCreator = async () => {
+      if (!user || !token) return;
+
+      try {
+        const resCreators = await fetch('http://localhost:4000/api/creators', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+
+        if (!resCreators.ok) {
+          throw new Error('Failed to fetch creators');
+        }
+
+        const creators: Creator[] = await resCreators.json();
+        const userCreator = creators.find((c: Creator) => c.id);
+
+        if (!userCreator) {
+          // User hasn't created profile yet
+          setCreator(null);
+          setLoading(false);
+          return;
+        }
+
+        setCreator(userCreator);
+
+        const resDonations = await fetch(
+          `http://localhost:4000/api/donations?creatorUsername=${userCreator.username}`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        );
+
+        if (resDonations.ok) {
+          const donationsData = await resDonations.json();
+          setDonations(Array.isArray(donationsData) ? donationsData : []);
+        }
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCreator();
+  }, [user, token]);
+
+  if (loading) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            <p className="mt-4 text-gray-600">Loading dashboard...</p>
+          </div>
+        </div>
+      </ProtectedRoute>
+    );
+  }
+
+  if (!creator) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center px-4">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Complete Your Profile</h1>
+            <p className="text-gray-600 mb-6">You need to create a username first</p>
+            <Link href="/auth/username" className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">
+              Create Username
+            </Link>
+          </div>
+        </div>
+      </ProtectedRoute>
+    );
+  }
+
+  const totalDonations = donations.reduce((sum, d) => sum + d.amount, 0);
+  const profileUrl = `${window.location.origin}/${creator.username}`;
+
+  return (
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 py-10 px-4">
+        <div className="max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <Link href="/settings" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
+              Settings
+            </Link>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-red-700">
+              {error}
+            </div>
+          )}
+
+          {/* Stats Grid */}
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
+              <p className="text-gray-600 text-sm font-medium">Total Donations</p>
+              <p className="text-3xl font-bold text-indigo-600 mt-2">{donations.length}</p>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
+              <p className="text-gray-600 text-sm font-medium">Total Earned</p>
+              <p className="text-3xl font-bold text-indigo-600 mt-2">{totalDonations.toFixed(2)} XLM</p>
+            </div>
+            <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
+              <p className="text-gray-600 text-sm font-medium">Average Donation</p>
+              <p className="text-3xl font-bold text-indigo-600 mt-2">
+                {donations.length > 0 ? (totalDonations / donations.length).toFixed(2) : 0} XLM
+              </p>
+            </div>
+          </div>
+
+          {/* Profile Link */}
+          <div className="bg-white rounded-lg shadow p-6 border border-gray-200 mb-8">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Your Profile</h2>
+            <div className="flex items-center gap-4">
+              <input
+                type="text"
+                value={profileUrl}
+                readOnly
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(profileUrl);
+                  alert('Profile URL copied to clipboard!');
+                }}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+
+          {/* Recent Donations */}
+          <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Recent Donations</h2>
+            {donations.length === 0 ? (
+              <p className="text-gray-600">No donations yet. Share your profile link to get started!</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Sender</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Amount</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Message</th>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {donations.map((donation) => (
+                      <tr key={donation.id} className="border-b border-gray-200 hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {donation.senderAddress.slice(0, 10)}...
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold text-indigo-600">
+                          {donation.amount} {donation.currency}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {donation.message || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {new Date(donation.createdAt).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </ProtectedRoute>
+  );
+}

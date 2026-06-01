@@ -1,0 +1,346 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import * as StellarSdk from '@stellar/stellar-sdk';
+import {
+  checkConnection,
+  getRequestAccess,
+  retrievePublicKey,
+  getBalance,
+  userSignTransaction,
+} from '@/lib/freighter';
+
+const HORIZON_URL = 'https://horizon-testnet.stellar.org';
+const server = new StellarSdk.Horizon.Server(HORIZON_URL);
+
+interface Creator {
+  id: number;
+  username: string;
+  displayName: string;
+  walletAddress: string;
+  bio: string;
+  donations: Donation[];
+}
+
+interface Donation {
+  id: number;
+  senderAddress: string;
+  amount: number;
+  currency: string;
+  message: string;
+  createdAt: string;
+}
+
+export default function CreatorProfilePage({ params }: { params: { username: string } }) {
+  const { username } = params;
+  const [creator, setCreator] = useState<Creator | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const [userAddress, setUserAddress] = useState<string | null>(null);
+  const [balance, setBalance] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+
+  const [donationAmount, setDonationAmount] = useState('5');
+  const [donationMessage, setDonationMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [toast, setToast] = useState<{ type: string; message: string } | null>(null);
+
+  const presets = ['1', '5', '10', '20'];
+
+  useEffect(() => {
+    const fetchCreator = async () => {
+      try {
+        const res = await fetch(`http://localhost:4000/api/creators/${username}`);
+        if (!res.ok) {
+          throw new Error('Creator not found');
+        }
+        const data = await res.json();
+        setCreator(data);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCreator();
+  }, [username]);
+
+  const handleConnectWallet = async () => {
+    setConnecting(true);
+    try {
+      await checkConnection();
+      await getRequestAccess();
+      const pub = await retrievePublicKey();
+      setUserAddress(pub);
+
+      const bal = await getBalance();
+      setBalance(parseFloat(bal).toFixed(4));
+      setToast({ type: 'success', message: 'Wallet connected!' });
+    } catch (err) {
+      setToast({ type: 'error', message: (err as Error).message });
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleSendDonation = async () => {
+    if (!userAddress || !creator?.walletAddress) {
+      setToast({ type: 'error', message: 'Wallet not connected or creator wallet not set' });
+      return;
+    }
+
+    setSending(true);
+    try {
+      const account = await server.loadAccount(userAddress);
+
+      const builder = new StellarSdk.TransactionBuilder(account, {
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase: StellarSdk.Networks.TESTNET,
+      })
+        .addOperation(
+          StellarSdk.Operation.payment({
+            destination: creator.walletAddress,
+            asset: StellarSdk.Asset.native(),
+            amount: parseFloat(donationAmount).toFixed(7),
+          })
+        )
+        .setTimeout(180);
+
+      if (donationMessage.trim()) {
+        builder.addMemo(StellarSdk.Memo.text(donationMessage.trim()));
+      }
+
+      const tx = builder.build();
+      const xdr = tx.toXDR();
+
+      const { signedTxXdr } = await userSignTransaction(xdr, userAddress);
+
+      const signed = StellarSdk.TransactionBuilder.fromXDR(
+        signedTxXdr,
+        StellarSdk.Networks.TESTNET
+      );
+
+      const result = await server.submitTransaction(signed);
+
+      // Record donation in database
+      await fetch('http://localhost:4000/api/donations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creatorUsername: creator.username,
+          senderAddress: userAddress,
+          amount: parseFloat(donationAmount),
+          message: donationMessage,
+          transactionHash: result.hash,
+        }),
+      });
+
+      // Refresh balance
+      try {
+        const newBal = await getBalance();
+        setBalance(parseFloat(newBal).toFixed(4));
+      } catch { }
+
+      setToast({ type: 'success', message: '🎉 Donation sent successfully!' });
+      setDonationAmount('5');
+      setDonationMessage('');
+    } catch (err) {
+      const msg = (err as any)?.response?.data?.extras?.result_codes?.transaction || (err as Error).message;
+      setToast({ type: 'error', message: msg || 'Transaction failed' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+          <p className="mt-4 text-gray-600">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !creator) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center px-4">
+        <div className="text-center bg-white rounded-lg p-8 max-w-md shadow">
+          <p className="text-red-600 font-semibold mb-4">{error || 'Creator not found'}</p>
+          <Link href="/" className="text-indigo-600 hover:underline">
+            Back to home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const recentDonations = creator.donations
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 py-10 px-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Creator Header */}
+        <div className="bg-white rounded-lg shadow border border-gray-200 p-8 mb-8 text-center">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            {creator.displayName || creator.username}
+          </h1>
+          <p className="text-gray-600 text-xl mb-4">@{creator.username}</p>
+          {creator.bio && <p className="text-gray-600 mb-6">{creator.bio}</p>}
+
+          <div className="grid md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-200">
+            <div>
+              <p className="text-gray-500 text-sm">Total Donations</p>
+              <p className="text-2xl font-bold text-indigo-600">
+                {creator.donations.length}
+              </p>
+            </div>
+            <div>
+              <p className="text-gray-500 text-sm">Total Received</p>
+              <p className="text-2xl font-bold text-indigo-600">
+                {creator.donations.reduce((sum, d) => sum + d.amount, 0).toFixed(2)} XLM
+              </p>
+            </div>
+            <div>
+              <p className="text-gray-500 text-sm">Average Donation</p>
+              <p className="text-2xl font-bold text-indigo-600">
+                {creator.donations.length > 0
+                  ? (creator.donations.reduce((sum, d) => sum + d.amount, 0) / creator.donations.length).toFixed(2)
+                  : 0} XLM
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-8">
+          {/* Donation Card */}
+          <div className="md:col-span-1">
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6 sticky top-8">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Support {creator.displayName || creator.username}</h2>
+
+              {!userAddress ? (
+                <button
+                  onClick={handleConnectWallet}
+                  disabled={connecting}
+                  className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 font-semibold mb-4 transition"
+                >
+                  {connecting ? 'Connecting...' : 'Connect Wallet'}
+                </button>
+              ) : (
+                <>
+                  <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
+                    <p className="text-gray-600">Wallet: {userAddress.slice(0, 8)}...</p>
+                    <p className="text-indigo-600 font-semibold mt-1">{balance} XLM</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Amount (XLM)
+                      </label>
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={donationAmount}
+                        onChange={(e) => setDonationAmount(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2">
+                      {presets.map((preset) => (
+                        <button
+                          key={preset}
+                          onClick={() => setDonationAmount(preset)}
+                          className={`py-2 rounded-lg font-semibold text-sm transition ${
+                            donationAmount === preset
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Message (Optional)
+                      </label>
+                      <textarea
+                        value={donationMessage}
+                        onChange={(e) => setDonationMessage(e.target.value)}
+                        maxLength={28}
+                        placeholder="Thanks for your work!"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                        rows={3}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        {donationMessage.length}/28
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleSendDonation}
+                      disabled={sending || !creator.walletAddress}
+                      className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60 font-semibold transition"
+                    >
+                      {sending ? 'Sending...' : 'Send Donation'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Recent Donors */}
+          <div className="md:col-span-2">
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Recent Supporters</h2>
+              {recentDonations.length === 0 ? (
+                <p className="text-gray-600">Be the first to support this creator!</p>
+              ) : (
+                <div className="space-y-3">
+                  {recentDonations.map((donation) => (
+                    <div key={donation.id} className="flex items-start justify-between p-4 bg-gray-50 rounded-lg">
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">
+                          {donation.senderAddress.slice(0, 8)}...
+                        </p>
+                        {donation.message && (
+                          <p className="text-sm text-gray-600 mt-1">"{donation.message}"</p>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(donation.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <p className="font-bold text-indigo-600">
+                        {donation.amount} {donation.currency}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 bg-white rounded-lg shadow border border-gray-200 p-4 max-w-sm animate-pulse">
+          <p className={`font-semibold ${toast.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+            {toast.message}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

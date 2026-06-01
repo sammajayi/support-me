@@ -7,8 +7,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id            Int       @id @default(autoincrement())
+  email         String    @unique
+  passwordHash  String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  creator       Creator?
+}
+
 model Creator {
   id            Int        @id @default(autoincrement())
+  userId        Int        @unique
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   username      String     @unique
   walletAddress String
   displayName   String?

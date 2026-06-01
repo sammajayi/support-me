@@ -1,5 +1,6 @@
 import { Router } from "express";
 import prisma from "../prisma";
+import { authMiddleware, AuthRequest } from "../middleware/auth";
 
 const router = Router();
 
@@ -60,6 +61,49 @@ router.post("/", async (req, res) => {
   return res.status(201).json(creator);
 });
 
+router.post("/:username/create", authMiddleware as any, async (req: AuthRequest, res) => {
+  const { username } = req.params;
+  const { walletAddress, displayName, bio, avatarUrl } = req.body;
+
+  if (!username) {
+    return res.status(400).json({ error: "username is required" });
+  }
+
+  if (!req.user) {
+    return res.status(401).json({ error: "User not authenticated" });
+  }
+
+  try {
+    const existing = await prisma.creator.findUnique({ where: { username } });
+    if (existing) {
+      return res.status(409).json({ error: "Username already exists" });
+    }
+
+    const userCreator = await prisma.creator.findUnique({
+      where: { userId: req.user.id }
+    });
+    if (userCreator) {
+      return res.status(409).json({ error: "User already has a creator profile" });
+    }
+
+    const creator = await prisma.creator.create({
+      data: {
+        userId: req.user.id,
+        username,
+        walletAddress: walletAddress || "",
+        displayName,
+        bio,
+        avatarUrl
+      }
+    });
+
+    return res.status(201).json(creator);
+  } catch (error) {
+    console.error("Create username error:", error);
+    return res.status(500).json({ error: "Failed to create username" });
+  }
+});
+
 router.put("/:username", async (req, res) => {
   const { username } = req.params;
   const updates = req.body;
@@ -77,3 +121,4 @@ router.put("/:username", async (req, res) => {
 });
 
 export default router;
+

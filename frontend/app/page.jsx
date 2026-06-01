@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useAuth } from '@/context/AuthContext'
 
 export default function Home() {
   const [scrolled, setScrolled] = useState(false)
+  const { user, logout } = useAuth()
 
   useEffect(() => {
     const handleScroll = () => {
@@ -23,9 +25,31 @@ export default function Home() {
           <div className="space-x-6">
             <a href="#features" className="text-gray-600 hover:text-indigo-600 transition">Features</a>
             <a href="#how-it-works" className="text-gray-600 hover:text-indigo-600 transition">How it Works</a>
-            <Link href="/donate" className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition">
-              Get Started
-            </Link>
+            {user ? (
+              <>
+                <Link href="/dashboard" className="text-gray-600 hover:text-indigo-600 transition">
+                  Dashboard
+                </Link>
+                <button
+                  onClick={() => {
+                    logout()
+                    window.location.href = '/'
+                  }}
+                  className="text-gray-600 hover:text-indigo-600 transition"
+                >
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link href="/auth/login" className="text-gray-600 hover:text-indigo-600 transition">
+                  Sign In
+                </Link>
+                <Link href="/auth/signup" className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition">
+                  Get Started
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -43,12 +67,20 @@ export default function Home() {
             A decentralized tipping platform built on Stellar blockchain. Send XLM donations directly to creators you love—no intermediaries, no fees.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/donate" className="bg-indigo-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-indigo-700 transition text-lg">
-              Donate Now
-            </Link>
-            <a href="#features" className="border-2 border-indigo-600 text-indigo-600 px-8 py-4 rounded-lg font-semibold hover:bg-indigo-50 transition text-lg">
-              Learn More
-            </a>
+            {user ? (
+              <Link href="/dashboard" className="bg-indigo-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-indigo-700 transition text-lg">
+                Go to Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/auth/signup" className="bg-indigo-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-indigo-700 transition text-lg">
+                  Become a Creator
+                </Link>
+                <a href="#features" className="border-2 border-indigo-600 text-indigo-600 px-8 py-4 rounded-lg font-semibold hover:bg-indigo-50 transition text-lg">
+                  Learn More
+                </a>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -123,29 +155,29 @@ export default function Home() {
             <div className="flex gap-6">
               <div className="flex-shrink-0 w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-lg">1</div>
               <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Set Up Your Creator Profile</h3>
-                <p className="text-gray-600">Create a profile with your unique username. Share your xp link and let supporters find you.</p>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Sign Up & Create Profile</h3>
+                <p className="text-gray-600">Create an account with email and password, then choose a unique username for your public profile.</p>
               </div>
             </div>
             <div className="flex gap-6">
               <div className="flex-shrink-0 w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-lg">2</div>
               <div>
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Connect Freighter Wallet</h3>
-                <p className="text-gray-600">Install Freighter extension and connect your Stellar wallet. Secure, simple, and self-custodial.</p>
+                <p className="text-gray-600">In your settings, connect your Freighter wallet to receive tips. Secure, simple, and self-custodial.</p>
               </div>
             </div>
             <div className="flex gap-6">
               <div className="flex-shrink-0 w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-lg">3</div>
               <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Supporters Send XLM</h3>
-                <p className="text-gray-600">Supporters visit your profile and send XLM tips. Donations are instantly recorded on the blockchain.</p>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Share Your Link</h3>
+                <p className="text-gray-600">Get your unique profile link (supportme.app/yourname) and share it with your community, fans, or on social media.</p>
               </div>
             </div>
             <div className="flex gap-6">
               <div className="flex-shrink-0 w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-lg">4</div>
               <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Check Your Dashboard</h3>
-                <p className="text-gray-600">View detailed analytics about donations, top supporters, and trends. All in real-time.</p>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Receive Donations</h3>
+                <p className="text-gray-600">Supporters visit your profile and send XLM tips. Donations are instantly recorded on the blockchain and visible in your dashboard.</p>
               </div>
             </div>
           </div>
@@ -177,9 +209,15 @@ export default function Home() {
         <div className="max-w-2xl mx-auto text-center bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl p-12 text-white">
           <h2 className="text-3xl sm:text-4xl font-bold mb-6">Ready to Support Your Favorite Creator?</h2>
           <p className="text-lg mb-8 opacity-90">Join thousands of supporters making a real impact with Stellar-powered donations.</p>
-          <Link href="/donate" className="bg-white text-indigo-600 px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 transition text-lg inline-block">
-            Get Started Now →
-          </Link>
+          {user ? (
+            <Link href="/dashboard" className="bg-white text-indigo-600 px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 transition text-lg inline-block">
+              Go to Dashboard →
+            </Link>
+          ) : (
+            <Link href="/auth/signup" className="bg-white text-indigo-600 px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 transition text-lg inline-block">
+              Get Started Now →
+            </Link>
+          )}
         </div>
       </section>
 
@@ -224,3 +262,4 @@ export default function Home() {
     </div>
   )
 }
+
