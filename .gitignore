@@ -1,5 +1,6 @@
 # Rust's output directory
 target
+contracts/*/test_snapshots
 
 # Local settings
 .soroban

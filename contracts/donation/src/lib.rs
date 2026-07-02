@@ -1,6 +1,6 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Symbol, Vec, String};
+use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Symbol, String};
 
 #[derive(Clone)]
 #[contracttype]
@@ -43,7 +43,7 @@ impl DonationContract {
             created_at: env.ledger().timestamp(),
         };
 
-        env.storage().permanent().set(&creator, &profile);
+        env.storage().persistent().set(&creator, &profile);
 
         env.events().publish(
             (Symbol::short("created"),),
@@ -55,14 +55,15 @@ impl DonationContract {
 
     /// Get creator profile
     pub fn get_creator(env: Env, creator: Address) -> Option<CreatorProfile> {
-        env.storage().permanent().get(&creator)
+        env.storage().persistent().get(&creator)
     }
 
-    /// Record a donation
+    /// Record a donation and transfer the donated amount from donor to creator
     pub fn donate(
         env: Env,
         donor: Address,
         creator: Address,
+        token: Address,
         amount: i128,
         memo: String,
     ) -> DonationRecord {
@@ -71,10 +72,14 @@ impl DonationContract {
         // Validate inputs
         assert!(amount > 0, "Donation amount must be positive");
 
+        // Move the funds from donor to creator via the token contract (e.g. native XLM SAC)
+        let token_client = token::Client::new(&env, &token);
+        token_client.transfer(&donor, &creator, &amount);
+
         // Get or create creator profile
         let mut creator_profile = env
             .storage()
-            .permanent()
+            .persistent()
             .get::<_, CreatorProfile>(&creator)
             .unwrap_or_else(|| CreatorProfile {
                 address: creator.clone(),
@@ -104,15 +109,16 @@ impl DonationContract {
             .get(&DONATION_COUNTER)
             .unwrap_or(0);
 
-        let donation_key = Symbol::short(&format!("don{}", counter).as_bytes());
-        env.storage().persistent().set(&donation_key, &donation);
+        env.storage()
+            .persistent()
+            .set(&(DONATIONS_KEY, counter), &donation);
         env.storage()
             .persistent()
             .set(&DONATION_COUNTER, &(counter + 1));
 
         // Update creator profile
         env.storage()
-            .permanent()
+            .persistent()
             .set(&creator, &creator_profile);
 
         // Emit event
@@ -132,7 +138,7 @@ impl DonationContract {
 
     /// Get creator's total donations
     pub fn get_creator_stats(env: Env, creator: Address) -> Option<CreatorProfile> {
-        env.storage().permanent().get(&creator)
+        env.storage().persistent().get(&creator)
     }
 
     /// Get all donations count (approximate, stored in counter)
@@ -154,7 +160,7 @@ impl DonationContract {
         // For now, this is a placeholder for verification logic
         donor.require_auth();
 
-        if let Some(profile) = env.storage().permanent().get::<_, CreatorProfile>(&creator) {
+        if let Some(profile) = env.storage().persistent().get::<_, CreatorProfile>(&creator) {
             profile.total_donations >= amount && profile.donation_count > 0
         } else {
             false
@@ -166,21 +172,24 @@ impl DonationContract {
 mod tests {
     use super::*;
     use soroban_sdk::testutils::{Address as _, Ledger};
+    use soroban_sdk::token::StellarAssetClient;
+
+    fn create_token_contract(env: &Env, admin: &Address) -> Address {
+        env.register_stellar_asset_contract_v2(admin.clone())
+            .address()
+    }
 
     #[test]
     fn test_register_creator() {
         let env = Env::default();
-        let creator = Address::random(&env);
+        env.mock_all_auths();
+        let contract_id = env.register(DonationContract, ());
+        let client = DonationContractClient::new(&env, &contract_id);
 
-        env.ledger()
-            .with_source_account(&creator)
-            .with_sequence_number(100);
+        let creator = Address::generate(&env);
+        env.ledger().with_mut(|li| li.sequence_number = 100);
 
-        let profile = DonationContract::register_creator(
-            env.clone(),
-            creator.clone(),
-            String::from_bytes(&env, b"awesome_dev"),
-        );
+        let profile = client.register_creator(&creator, &String::from_bytes(&env, b"awesome_dev"));
 
         assert_eq!(profile.donation_count, 0);
         assert_eq!(profile.total_donations, 0);
@@ -189,35 +198,42 @@ mod tests {
     #[test]
     fn test_donate() {
         let env = Env::default();
-        let donor = Address::random(&env);
-        let creator = Address::random(&env);
+        env.mock_all_auths();
+        let contract_id = env.register(DonationContract, ());
+        let client = DonationContractClient::new(&env, &contract_id);
 
-        env.ledger()
-            .with_source_account(&donor)
-            .with_sequence_number(100);
+        let admin = Address::generate(&env);
+        let donor = Address::generate(&env);
+        let creator = Address::generate(&env);
+
+        env.ledger().with_mut(|li| li.sequence_number = 100);
+
+        let token_address = create_token_contract(&env, &admin);
+        StellarAssetClient::new(&env, &token_address).mint(&donor, &10_000);
 
         // Register creator first
-        DonationContract::register_creator(
-            env.clone(),
-            creator.clone(),
-            String::from_bytes(&env, b"awesome_dev"),
-        );
+        client.register_creator(&creator, &String::from_bytes(&env, b"awesome_dev"));
 
         // Make donation
-        let donation = DonationContract::donate(
-            env.clone(),
-            donor.clone(),
-            creator.clone(),
-            1000,
-            String::from_bytes(&env, b"Great work!"),
+        let donation = client.donate(
+            &donor,
+            &creator,
+            &token_address,
+            &1000,
+            &String::from_bytes(&env, b"Great work!"),
         );
 
         assert_eq!(donation.amount, 1000);
         assert_eq!(donation.donor, donor);
         assert_eq!(donation.creator, creator);
 
+        // Verify the transfer actually happened
+        let token_client = token::Client::new(&env, &token_address);
+        assert_eq!(token_client.balance(&creator), 1000);
+        assert_eq!(token_client.balance(&donor), 9_000);
+
         // Verify creator stats
-        let stats = DonationContract::get_creator_stats(env.clone(), creator.clone()).unwrap();
+        let stats = client.get_creator_stats(&creator).unwrap();
         assert_eq!(stats.total_donations, 1000);
         assert_eq!(stats.donation_count, 1);
     }
