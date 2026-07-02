@@ -2,6 +2,10 @@
 
 SupportMe is a creator tipping and donation platform. This enables creators on Stellar to receive donations and tips easily through embedded widgets or shareable links.
 
+## Live Demo
+
+[https://support-me-tawny.vercel.app/](https://support-me-tawny.vercel.app/)
+
 ## What's New (v2)
 
 - **User Authentication**: Email/password signup and login with JWT tokens
