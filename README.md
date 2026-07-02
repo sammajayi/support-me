@@ -23,7 +23,7 @@ simulation, or network failures.
 
 ## What's New (v2)
 
-- **User Authentication**: Email/password signup and login with JWT tokens
+- **Wallet Sign-In**: Connect a Stellar wallet and sign a challenge message to log in (no email/password) — JWT issued after signature verification
 - **Creator Profiles**: Each user creates a unique username (e.g., `supportme.app/sammie`) with a public profile
 - **Dashboard**: Track donations, earnings, and supporter statistics
 - **Multi-Wallet Connection**: Connect Freighter, xBull, Albedo, Rabet, or Lobstr to send or receive tips
@@ -33,7 +33,7 @@ simulation, or network failures.
 
 ## Features
 
-- **User Authentication**: Secure signup/login with email and password
+- **Wallet-Based Authentication**: Sign in by proving ownership of a Stellar wallet via a signed challenge message (SEP-0043/SEP-0053) — no passwords
 - **Creator Profiles**: Public, shareable creator pages with unique usernames
 - **Multi-Wallet Integration**: Connect Freighter, xBull, Albedo, Rabet, or Lobstr via Stellar Wallets Kit
 - **On-Chain Contract Calls**: Donations are settled and recorded through a deployed Soroban contract
@@ -49,7 +49,7 @@ simulation, or network failures.
 - **Database**: PostgreSQL
 - **Smart Contract**: Soroban (Rust), deployed to Stellar Testnet
 - **Wallet**: Stellar SDK + Stellar Wallets Kit (Freighter, xBull, Albedo, Rabet, Lobstr)
-- **Auth**: JWT tokens, bcryptjs for password hashing
+- **Auth**: JWT tokens, Stellar wallet sign-message challenge (SEP-0043/SEP-0053) for sign-in
 
 ## Project Structure
 
@@ -72,9 +72,7 @@ simulation, or network failures.
 ├── frontend/                   # Next.js application
 │   ├── app/
 │   │   ├── auth/               # Authentication pages
-│   │   │   ├── signup/
-│   │   │   ├── login/
-│   │   │   └── username/       # Username creation after signup
+│   │   │   └── username/       # Username creation after first wallet sign-in
 │   │   ├── dashboard/          # Creator dashboard
 │   │   ├── settings/           # Profile and wallet settings
 │   │   ├── [username]/         # Dynamic creator profile pages
@@ -100,7 +98,7 @@ simulation, or network failures.
 ### Creator Flow
 
 ```
-1. Sign Up (email/password)
+1. Connect Wallet & Sign Challenge Message (proves wallet ownership)
    ↓
 2. Create Username
    ↓
@@ -141,24 +139,48 @@ simulation, or network failures.
 
 ### Backend Setup
 
+The backend needs a running PostgreSQL database before it will start. If you
+don't already have one, the fastest options are:
+
+- **Local**: install Postgres (e.g. `brew install postgresql@16` on macOS),
+  start it, then create a database: `createdb supportme`.
+- **Hosted (no local install)**: create a free Postgres instance on
+  [Neon](https://neon.tech), [Supabase](https://supabase.com), or
+  [Railway](https://railway.app) and copy the connection string it gives you.
+
+Then set up the backend:
+
 ```bash
 cd backend
 npm install
 
 # Setup environment
 cp .env.example .env
-# Update DATABASE_URL in .env with your PostgreSQL connection string
-# Add a JWT_SECRET (random string for token signing)
+# Edit .env and set:
+#   DATABASE_URL - your PostgreSQL connection string
+#                  (e.g. postgresql://user:password@localhost:5432/supportme)
+#   JWT_SECRET   - any random string, used to sign login tokens
 
-# Generate Prisma client and run migrations
+# Generate the Prisma client
 npm run prisma:generate
-npm run prisma:migrate
+
+# Push the schema to your database (creates the User/Creator/Donation tables).
+# There is no migrations/ folder in this repo, so use `db push` rather than
+# `prisma:migrate` - it syncs schema.prisma directly to the database:
+npx prisma db push
 
 # Start the development server
 npm run dev
 ```
 
-Backend will run on `http://localhost:4000`
+Backend will run on `http://localhost:4000`. Verify it's up with:
+`curl http://localhost:4000/health` (should return `{"status":"ok",...}`).
+
+If you only want to work on the frontend UI without a real backend, you can
+skip this section for now - pages that don't require sign-in (the landing
+page, public creator profiles) will still work. Anything behind
+`ProtectedRoute` (dashboard, settings, username creation) requires the wallet
+sign-in flow, which requires the backend to be running.
 
 ### Frontend Setup
 
@@ -183,19 +205,19 @@ Frontend will run on `http://localhost:3000`
 
 ### Authentication
 
-- `POST /api/auth/signup` - Create account
-  - Body: `{ email, password }`
-  - Returns: `{ user: { id, email }, token }`
+- `POST /api/auth/challenge` - Request a sign-in challenge for a wallet address
+  - Body: `{ walletAddress }`
+  - Returns: `{ message }` - a nonce-bearing message to be signed by the wallet (valid for 5 minutes)
 
-- `POST /api/auth/login` - Sign in
-  - Body: `{ email, password }`
-  - Returns: `{ user: { id, email }, token }`
+- `POST /api/auth/verify` - Verify the signed challenge and sign in
+  - Body: `{ walletAddress, signedMessage }` (`signedMessage` is the base64 signature from the wallet's `signMessage` call)
+  - Returns: `{ user: { id, walletAddress }, token, hasProfile, username }`
 
 ### Creators
 
 - `GET /api/creators` - List all creators
 - `GET /api/creators/:username` - Get creator by username
-- `POST /api/creators/:username/create` - Create username after signup (requires auth)
+- `POST /api/creators/:username/create` - Create username after first wallet sign-in (requires auth)
   - Body: `{ walletAddress, displayName, bio }`
 - `PUT /api/creators/:username` - Update creator profile
   - Body: `{ walletAddress, displayName, bio, avatarUrl }`
@@ -208,10 +230,8 @@ Frontend will run on `http://localhost:3000`
 
 ## Frontend Pages
 
-- `/` - Landing page
-- `/auth/signup` - Sign up page
-- `/auth/login` - Sign in page
-- `/auth/username` - Create username after signup (protected)
+- `/` - Landing page (includes "Connect Wallet" sign-in)
+- `/auth/username` - Create username after first wallet sign-in (protected)
 - `/dashboard` - Creator dashboard (protected)
 - `/settings` - Profile and wallet settings (protected)
 - `/[username]` - Public creator profile
@@ -251,10 +271,10 @@ Visit `http://localhost:3000` in your browser.
 
 ### Testing the Flow
 
-1. **Sign Up**: Go to `/auth/signup`, create account with email/password
-2. **Create Username**: Redirected to `/auth/username`, choose a unique username
+1. **Connect Wallet**: On the landing page, click "Connect Wallet", pick a wallet, and approve the sign-message request
+2. **Create Username**: First-time sign-ins are redirected to `/auth/username`, choose a unique username
 3. **Dashboard**: Land in `/dashboard` - see stats and profile link
-4. **Connect Wallet**: Go to `/settings`, click "Connect Wallet", pick a wallet, approve
+4. **Set Payout Wallet**: Go to `/settings`, click "Connect Wallet", pick a wallet, approve (can be the same or a different wallet from the one used to sign in)
 5. **Share Link**: Copy your profile URL from dashboard
 6. **Send Donation**: Visit your profile URL, connect a wallet as supporter, sign the `donate` contract call
 
@@ -262,7 +282,7 @@ Visit `http://localhost:3000` in your browser.
 
 ### User
 ```
-id, email (unique), passwordHash, createdAt, updatedAt
+id, walletAddress (unique), createdAt, updatedAt
 ```
 
 ### Creator
@@ -304,7 +324,7 @@ npm run build
 ## Security Notes
 
 - JWT tokens expire in 7 days
-- Passwords are hashed with bcryptjs (10 salt rounds)
+- Sign-in requires a signed challenge message proving ownership of the wallet's private key (SEP-0053 verification), not just a submitted address
 - All sensitive routes require valid JWT token
 - CORS is enabled for development (configure for production)
 - Stellar transactions are signed client-side via the connected wallet (Stellar Wallets Kit)
