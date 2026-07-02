@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { checkConnection, getRequestAccess, retrievePublicKey } from '@/lib/freighter';
+import { connectWallet } from '@/lib/wallet';
 
 interface Creator {
   id: number;
@@ -60,10 +60,8 @@ export default function SettingsPage() {
   const handleConnectWallet = async () => {
     try {
       setError('');
-      await checkConnection();
-      await getRequestAccess();
-      const pub = await retrievePublicKey();
-      setWalletAddress(pub);
+      const address = await connectWallet();
+      setWalletAddress(address);
       setSuccess('Wallet connected successfully!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -190,7 +188,7 @@ export default function SettingsPage() {
                         onClick={handleConnectWallet}
                         className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition whitespace-nowrap"
                       >
-                        Connect Freighter
+                        Connect Wallet
                       </button>
                     </div>
                     <p className="text-xs text-gray-500 mt-2">

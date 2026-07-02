@@ -3,16 +3,20 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import * as StellarSdk from '@stellar/stellar-sdk';
-import {
-  checkConnection,
-  getRequestAccess,
-  retrievePublicKey,
-  getBalance,
-  userSignTransaction,
-} from '@/lib/freighter';
+import { connectWallet } from '@/lib/wallet';
+import { sendDonation, DonationError } from '@/lib/contract';
+import Toast from '@/components/Toast';
 
 const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const server = new StellarSdk.Horizon.Server(HORIZON_URL);
+
+const STATUS_LABELS: Record<string, string> = {
+  building: 'Preparing transaction...',
+  simulating: 'Simulating on the network...',
+  'awaiting-signature': 'Waiting for wallet signature...',
+  submitting: 'Submitting transaction...',
+  pending: 'Confirming on the network...',
+};
 
 interface Creator {
   id: number;
@@ -45,7 +49,8 @@ export default function CreatorProfilePage({ params }: { params: { username: str
   const [donationAmount, setDonationAmount] = useState('5');
   const [donationMessage, setDonationMessage] = useState('');
   const [sending, setSending] = useState(false);
-  const [toast, setToast] = useState<{ type: string; message: string } | null>(null);
+  const [txStatus, setTxStatus] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: string; title: string; detail?: string; hash?: string } | null>(null);
 
   const presets = ['1', '5', '10', '20'];
 
@@ -71,16 +76,19 @@ export default function CreatorProfilePage({ params }: { params: { username: str
   const handleConnectWallet = async () => {
     setConnecting(true);
     try {
-      await checkConnection();
-      await getRequestAccess();
-      const pub = await retrievePublicKey();
-      setUserAddress(pub);
+      const address = await connectWallet();
+      setUserAddress(address);
 
-      const bal = await getBalance();
-      setBalance(parseFloat(bal).toFixed(4));
-      setToast({ type: 'success', message: 'Wallet connected!' });
+      const account = await server.loadAccount(address);
+      const xlm = account.balances.find((b) => b.asset_type === 'native');
+      setBalance(parseFloat(xlm?.balance || '0').toFixed(4));
+      setToast({ type: 'success', title: 'Wallet connected!' });
     } catch (err) {
-      setToast({ type: 'error', message: (err as Error).message });
+      setToast({
+        type: 'error',
+        title: 'Could not connect wallet',
+        detail: (err as Error).message,
+      });
     } finally {
       setConnecting(false);
     }
@@ -88,42 +96,24 @@ export default function CreatorProfilePage({ params }: { params: { username: str
 
   const handleSendDonation = async () => {
     if (!userAddress || !creator?.walletAddress) {
-      setToast({ type: 'error', message: 'Wallet not connected or creator wallet not set' });
+      setToast({
+        type: 'error',
+        title: 'Cannot send donation',
+        detail: 'Wallet not connected or creator wallet not set',
+      });
       return;
     }
 
     setSending(true);
+    setTxStatus('building');
     try {
-      const account = await server.loadAccount(userAddress);
-
-      const builder = new StellarSdk.TransactionBuilder(account, {
-        fee: StellarSdk.BASE_FEE,
-        networkPassphrase: StellarSdk.Networks.TESTNET,
-      })
-        .addOperation(
-          StellarSdk.Operation.payment({
-            destination: creator.walletAddress,
-            asset: StellarSdk.Asset.native(),
-            amount: parseFloat(donationAmount).toFixed(7),
-          })
-        )
-        .setTimeout(180);
-
-      if (donationMessage.trim()) {
-        builder.addMemo(StellarSdk.Memo.text(donationMessage.trim()));
-      }
-
-      const tx = builder.build();
-      const xdr = tx.toXDR();
-
-      const { signedTxXdr } = await userSignTransaction(xdr, userAddress);
-
-      const signed = StellarSdk.TransactionBuilder.fromXDR(
-        signedTxXdr,
-        StellarSdk.Networks.TESTNET
-      );
-
-      const result = await server.submitTransaction(signed);
+      const { hash } = await sendDonation({
+        donorAddress: userAddress,
+        creatorAddress: creator.walletAddress,
+        amountXlm: donationAmount,
+        memo: donationMessage,
+        onStatus: setTxStatus,
+      });
 
       // Record donation in database
       await fetch('http://localhost:4000/api/donations', {
@@ -134,24 +124,38 @@ export default function CreatorProfilePage({ params }: { params: { username: str
           senderAddress: userAddress,
           amount: parseFloat(donationAmount),
           message: donationMessage,
-          transactionHash: result.hash,
+          transactionHash: hash,
         }),
       });
 
       // Refresh balance
       try {
-        const newBal = await getBalance();
-        setBalance(parseFloat(newBal).toFixed(4));
+        const account = await server.loadAccount(userAddress);
+        const xlm = account.balances.find((b) => b.asset_type === 'native');
+        setBalance(parseFloat(xlm?.balance || '0').toFixed(4));
       } catch { }
 
-      setToast({ type: 'success', message: '🎉 Donation sent successfully!' });
+      setToast({ type: 'success', title: '🎉 Donation sent successfully!', hash });
       setDonationAmount('5');
       setDonationMessage('');
     } catch (err) {
-      const msg = (err as any)?.response?.data?.extras?.result_codes?.transaction || (err as Error).message;
-      setToast({ type: 'error', message: msg || 'Transaction failed' });
+      // Three distinct, user-facing error categories:
+      // 'wallet' (not connected / signing rejected), 'simulation' (invalid
+      // amount, insufficient balance, contract precondition), 'network'
+      // (RPC/submission/confirmation failure).
+      if (err instanceof DonationError) {
+        const titles: Record<string, string> = {
+          wallet: 'Wallet error',
+          simulation: 'Transaction rejected',
+          network: 'Network error',
+        };
+        setToast({ type: 'error', title: titles[err.type] || 'Donation failed', detail: err.message });
+      } else {
+        setToast({ type: 'error', title: 'Donation failed', detail: (err as Error).message });
+      }
     } finally {
       setSending(false);
+      setTxStatus(null);
     }
   };
 
@@ -294,6 +298,12 @@ export default function CreatorProfilePage({ params }: { params: { username: str
                     >
                       {sending ? 'Sending...' : 'Send Donation'}
                     </button>
+
+                    {txStatus && STATUS_LABELS[txStatus] && (
+                      <p className="text-sm text-gray-600 text-center animate-pulse">
+                        {STATUS_LABELS[txStatus]}
+                      </p>
+                    )}
                   </div>
                 </>
               )}
@@ -333,14 +343,7 @@ export default function CreatorProfilePage({ params }: { params: { username: str
         </div>
       </div>
 
-      {/* Toast */}
-      {toast && (
-        <div className="fixed bottom-4 right-4 bg-white rounded-lg shadow border border-gray-200 p-4 max-w-sm animate-pulse">
-          <p className={`font-semibold ${toast.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-            {toast.message}
-          </p>
-        </div>
-      )}
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }
