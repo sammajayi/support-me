@@ -29,7 +29,7 @@ simulation, or network failures.
 ## What's New (v2)
 
 - **Wallet Sign-In**: Connect a Stellar wallet and sign a challenge message to log in (no email/password) — JWT issued after signature verification
-- **Creator Profiles**: Each user creates a unique username (e.g., `https://support-mee.vercel.app/sammie`) with a public profile
+- **Creator Profiles**: Each user creates a unique username (e.g., `https://support-mee.vercel.app/sammajayi`) with a public profile
 - **Dashboard**: Track donations, earnings, and supporter statistics
 - **Multi-Wallet Connection**: Connect Freighter, xBull, Albedo, Rabet, or Lobstr to send or receive tips
 - **On-Chain Donations**: Donations call a deployed Soroban contract that transfers XLM and records the donation on-chain
