@@ -9,9 +9,17 @@ crate-type = ["cdylib"]
 
 [dependencies]
 soroban-sdk = { workspace = true }
+common = { path = "../common" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+# Test-only: lets the donation contract's integration tests register the
+# real CreatorRegistry contract type in a shared test `Env`. This is NOT a
+# build dependency of the deployed donation contract (dev-dependencies are
+# excluded from release/wasm builds) — at runtime the two contracts only
+# ever talk to each other through `env.invoke_contract`, exactly like two
+# independently deployed contracts on-chain.
+creator-registry = { path = "../creator-registry" }
 
 [profile.release]
 opt-level = "z"

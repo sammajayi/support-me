@@ -267,6 +267,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -296,6 +303,14 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
+]
+
+[[package]]
+name = "creator-registry"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "soroban-sdk",
 ]
 
 [[package]]
@@ -495,6 +510,8 @@ dependencies = [
 name = "donation"
 version = "0.1.0"
 dependencies = [
+ "common",
+ "creator-registry",
  "soroban-sdk",
 ]
 
