@@ -6,21 +6,35 @@ SupportMe is a creator tipping and donation platform. This enables creators on S
 
 [https://support-mee.vercel.app/](https://support-mee.vercel.app/)
 
-## Smart Contract (Stellar Testnet)
+## Smart Contracts (Stellar Testnet)
 
-Donations are recorded on-chain via a Soroban contract that also moves the
-donated XLM from donor to creator in a single transaction.
+Donations are split across two independently deployed Soroban contracts that
+talk to each other exclusively through cross-contract calls
+(`env.invoke_contract`):
 
-- **Contract address**: [`CABIRZDB6LC5KYWUTROICM2GNJMNEU6SM2ACOTIM2V3EIQLQRPJG7XLF`](https://stellar.expert/explorer/testnet/contract/CABIRZDB6LC5KYWUTROICM2GNJMNEU6SM2ACOTIM2V3EIQLQRPJG7XLF)
+- **`donation`** moves the donated XLM from donor to creator via the native
+  Stellar Asset Contract, keeps an append-only on-chain log of donations, and
+  reports every settled donation to the registry.
+- **`creator-registry`** owns creator profile state (username, lifetime
+  totals) and only accepts `record_donation` calls from the donation contract
+  address it was initialized with.
 
-- **Example transaction** (`donated 5 XLM to the creator @sammajayi wallet`): [`Transaction Details`](https://stellar.expert/explorer/testnet/op/14626038680150017)
-- **Source**: [`contracts/donation/src/lib.rs`](contracts/donation/src/lib.rs)
+| Contract | Address | Source |
+| --- | --- | --- |
+| `donation` | [`CD6T563YCSYQHDMXC7VCFTKMWMXWHFHAU4NO7EAMFK57QLFI7SSXICYY`](https://stellar.expert/explorer/testnet/contract/CD6T563YCSYQHDMXC7VCFTKMWMXWHFHAU4NO7EAMFK57QLFI7SSXICYY) | [`contracts/donation/src/lib.rs`](contracts/donation/src/lib.rs) |
+| `creator-registry` | [`CCJL2GIWNNWECKGSEY2EXEGKBMN2LYJ3HVNJNZEO2AUXC4LRR7THG2U6`](https://stellar.expert/explorer/testnet/contract/CCJL2GIWNNWECKGSEY2EXEGKBMN2LYJ3HVNJNZEO2AUXC4LRR7THG2U6) | [`contracts/creator-registry/src/lib.rs`](contracts/creator-registry/src/lib.rs) |
+
 - **Network**: Stellar Testnet, RPC `https://soroban-testnet.stellar.org`
+- **Example transactions**:
+  - `register_creator` (bob registers as `bobcreates`): [`91d9cc8f1ed0905fe24a51e7213b582120f2e1fa74cf165b81cfb7f58077625f`](https://stellar.expert/explorer/testnet/tx/91d9cc8f1ed0905fe24a51e7213b582120f2e1fa74cf165b81cfb7f58077625f)
+  - `donate` (charlie donates 5 XLM to bob; donation contract cross-calls the registry to update bob's stats): [`804cf80669333df32713d6297e806a7b09b0583cd2c98646315611656d1914b4`](https://stellar.expert/explorer/testnet/tx/804cf80669333df32713d6297e806a7b09b0583cd2c98646315611656d1914b4)
 
-The frontend calls this contract directly from `frontend/lib/contract.js`
-(simulate → sign → submit → poll for confirmation), with live transaction
-status shown on the donation page and errors categorized as wallet,
-simulation, or network failures.
+The frontend calls the `donation` contract directly from
+`frontend/lib/contract.js` (simulate → sign → submit → poll for
+confirmation), with live transaction status shown on the donation page and
+errors categorized as wallet, simulation, or network failures. The
+`creator-registry` contract is never called directly by the frontend — it is
+only reachable through the `donation` contract's cross-contract calls.
 
 ## Multi-Wallet Integration using StellarWallet Kits
 
@@ -256,7 +270,8 @@ NODE_ENV=development
 ### Frontend (.env.local)
 
 ```env
-NEXT_PUBLIC_DONATION_CONTRACT_ID=CABIRZDB6LC5KYWUTROICM2GNJMNEU6SM2ACOTIM2V3EIQLQRPJG7XLF
+NEXT_PUBLIC_DONATION_CONTRACT_ID=CD6T563YCSYQHDMXC7VCFTKMWMXWHFHAU4NO7EAMFK57QLFI7SSXICYY
+NEXT_PUBLIC_CREATOR_REGISTRY_CONTRACT_ID=CCJL2GIWNNWECKGSEY2EXEGKBMN2LYJ3HVNJNZEO2AUXC4LRR7THG2U6
 NEXT_PUBLIC_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
 ```
 
