@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { connectWallet } from '@/lib/wallet';
 import { sendDonation, DonationError } from '@/lib/contract';
 import { API_URL } from '@/lib/api';
+import { Skeleton } from '@/components/Skeleton';
 
 const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const server = new StellarSdk.Horizon.Server(HORIZON_URL);
@@ -222,10 +223,39 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-          <p className="mt-4 text-gray-600">Loading profile...</p>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 py-10 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-lg shadow border border-gray-200 p-8 mb-8 text-center">
+            <Skeleton className="h-9 w-64 mx-auto mb-3" />
+            <Skeleton className="h-5 w-32 mx-auto mb-6" />
+            <div className="grid md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-200">
+              {[0, 1, 2].map((i) => (
+                <div key={i}>
+                  <Skeleton className="h-4 w-24 mx-auto mb-2" />
+                  <Skeleton className="h-7 w-16 mx-auto" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="md:col-span-1">
+              <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+                <Skeleton className="h-5 w-40 mb-4" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            </div>
+            <div className="md:col-span-2">
+              <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+                <Skeleton className="h-5 w-40 mb-4" />
+                <div className="space-y-3">
+                  {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
