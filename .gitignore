@@ -5,6 +5,7 @@ contracts/*/test_snapshots
 # Local settings
 .soroban
 .stellar
+.claude
 
 # Node dependencies
 node_modules

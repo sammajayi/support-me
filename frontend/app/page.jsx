@@ -37,31 +37,33 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-b from-white via-blue-50 to-white">
       {/* Navigation */}
       <nav className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'bg-white shadow-md' : 'bg-transparent'}`}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="text-2xl font-bold text-indigo-600">SupportMe</div>
-          <div className="space-x-6 flex items-center">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center gap-4">
+          <div className="text-xl sm:text-2xl font-bold text-indigo-600 shrink-0">SupportMe</div>
+          <div className="hidden sm:flex items-center gap-6">
             <a href="#features" className="text-gray-600 hover:text-indigo-600 transition">Features</a>
             <a href="#how-it-works" className="text-gray-600 hover:text-indigo-600 transition">How it Works</a>
+            {user && (
+              <Link href="/dashboard" className="text-gray-600 hover:text-indigo-600 transition">
+                Dashboard
+              </Link>
+            )}
+          </div>
+          <div className="flex items-center gap-4 shrink-0">
             {user ? (
-              <>
-                <Link href="/dashboard" className="text-gray-600 hover:text-indigo-600 transition">
-                  Dashboard
-                </Link>
-                <button
-                  onClick={() => {
-                    logout()
-                    window.location.href = '/'
-                  }}
-                  className="text-gray-600 hover:text-indigo-600 transition"
-                >
-                  Sign Out
-                </button>
-              </>
+              <button
+                onClick={() => {
+                  logout()
+                  window.location.href = '/'
+                }}
+                className="text-gray-600 hover:text-indigo-600 transition text-sm sm:text-base"
+              >
+                Sign Out
+              </button>
             ) : (
               <button
                 onClick={handleConnectWallet}
                 disabled={connecting}
-                className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition"
+                className="bg-indigo-600 text-white px-3 py-2 sm:px-6 text-sm sm:text-base rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition"
               >
                 {connecting ? 'Connecting...' : 'Connect Wallet'}
               </button>

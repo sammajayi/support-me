@@ -113,9 +113,12 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 py-10 px-4">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
-          <div className="flex justify-between items-center mb-8">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-            <Link href="/settings" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
+            <Link
+              href="/settings"
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-center"
+            >
               Settings
             </Link>
           </div>
@@ -147,12 +150,12 @@ export default function DashboardPage() {
           {/* Profile Link */}
           <div className="bg-white rounded-lg shadow p-6 border border-gray-200 mb-8">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Your Profile</h2>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row gap-4">
               <input
                 type="text"
                 value={profileUrl}
                 readOnly
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                className="flex-1 min-w-0 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
               />
               <button
                 onClick={() => {

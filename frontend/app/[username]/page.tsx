@@ -232,7 +232,7 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
         <div className="grid md:grid-cols-3 gap-8">
           {/* Donation Card */}
           <div className="md:col-span-1">
-            <div className="bg-white rounded-lg shadow border border-gray-200 p-6 sticky top-8">
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6 md:sticky md:top-8">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Support {creator.displayName || creator.username}</h2>
 
               {!userAddress ? (
