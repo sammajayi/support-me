@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev --name init"
+    "prisma:migrate": "prisma migrate dev --name init",
+    "test": "jest"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
