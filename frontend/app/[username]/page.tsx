@@ -29,17 +29,19 @@ interface Creator {
 }
 
 interface Donation {
-  id: number;
+  id: number | string;
   senderAddress: string;
   amount: number;
   currency: string;
   message: string;
   createdAt: string;
+  transactionHash?: string;
 }
 
 export default function CreatorProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = use(params);
   const [creator, setCreator] = useState<Creator | null>(null);
+  const [donations, setDonations] = useState<Donation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -63,6 +65,7 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
         }
         const data = await res.json();
         setCreator(data);
+        setDonations(data.donations || []);
       } catch (err) {
         setError((err as Error).message);
       } finally {
@@ -72,6 +75,57 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
 
     fetchCreator();
   }, [username]);
+
+  // Subscribe to the backend's SSE stream so new on-chain donations for this
+  // creator show up live for anyone viewing the page, without a refresh.
+  useEffect(() => {
+    if (!creator?.walletAddress) return;
+
+    const source = new EventSource(`${API_URL}/api/events`);
+
+    const handleDonation = (event: MessageEvent) => {
+      let payload: {
+        donor: string;
+        creator: string;
+        amount: string;
+        memo: string;
+        timestamp: number;
+        txHash: string;
+      };
+      try {
+        payload = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      if (payload.creator !== creator.walletAddress) return;
+
+      setDonations((prev) => {
+        if (prev.some((d) => d.transactionHash === payload.txHash)) return prev;
+        const newDonation: Donation = {
+          id: payload.txHash,
+          senderAddress: payload.donor,
+          amount: Number(payload.amount) / 1e7,
+          currency: 'XLM',
+          message: payload.memo,
+          createdAt: new Date(payload.timestamp * 1000).toISOString(),
+          transactionHash: payload.txHash,
+        };
+        return [newDonation, ...prev];
+      });
+
+      if (payload.donor !== userAddress) {
+        toast.success('New donation received! 🎉');
+      }
+    };
+
+    source.addEventListener('donation', handleDonation);
+
+    return () => {
+      source.removeEventListener('donation', handleDonation);
+      source.close();
+    };
+  }, [creator?.walletAddress, userAddress]);
 
   const handleConnectWallet = async () => {
     setConnecting(true);
@@ -190,7 +244,7 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
     );
   }
 
-  const recentDonations = creator.donations
+  const recentDonations = [...donations]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5);
 
@@ -209,20 +263,20 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
             <div>
               <p className="text-gray-500 text-sm">Total Donations</p>
               <p className="text-2xl font-bold text-indigo-600">
-                {creator.donations.length}
+                {donations.length}
               </p>
             </div>
             <div>
               <p className="text-gray-500 text-sm">Total Received</p>
               <p className="text-2xl font-bold text-indigo-600">
-                {creator.donations.reduce((sum, d) => sum + d.amount, 0).toFixed(2)} XLM
+                {donations.reduce((sum, d) => sum + d.amount, 0).toFixed(2)} XLM
               </p>
             </div>
             <div>
               <p className="text-gray-500 text-sm">Average Donation</p>
               <p className="text-2xl font-bold text-indigo-600">
-                {creator.donations.length > 0
-                  ? (creator.donations.reduce((sum, d) => sum + d.amount, 0) / creator.donations.length).toFixed(2)
+                {donations.length > 0
+                  ? (donations.reduce((sum, d) => sum + d.amount, 0) / donations.length).toFixed(2)
                   : 0} XLM
               </p>
             </div>

@@ -16,7 +16,7 @@ interface Creator {
 }
 
 interface Donation {
-  id: number;
+  id: number | string;
   senderAddress: string;
   amount: number;
   currency: string;
@@ -75,6 +75,55 @@ export default function DashboardPage() {
 
     fetchCreator();
   }, [user, token]);
+
+  // Subscribe to the backend's SSE stream so newly confirmed on-chain
+  // donations show up here live, without needing to refresh the page.
+  useEffect(() => {
+    if (!creator?.walletAddress) return;
+
+    const source = new EventSource(`${API_URL}/api/events`);
+
+    const handleDonation = (event: MessageEvent) => {
+      let payload: {
+        donor: string;
+        creator: string;
+        amount: string;
+        memo: string;
+        timestamp: number;
+        txHash: string;
+      };
+      try {
+        payload = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      if (payload.creator !== creator.walletAddress) return;
+
+      setDonations((prev) => {
+        if (prev.some((d) => d.transactionHash === payload.txHash)) return prev;
+        const newDonation: Donation = {
+          id: payload.txHash,
+          senderAddress: payload.donor,
+          amount: Number(payload.amount) / 1e7,
+          currency: 'XLM',
+          message: payload.memo,
+          transactionHash: payload.txHash,
+          createdAt: new Date(payload.timestamp * 1000).toISOString(),
+        };
+        return [newDonation, ...prev];
+      });
+
+      toast.success('New donation received! 🎉');
+    };
+
+    source.addEventListener('donation', handleDonation);
+
+    return () => {
+      source.removeEventListener('donation', handleDonation);
+      source.close();
+    };
+  }, [creator?.walletAddress]);
 
   if (loading) {
     return (
