@@ -1,55 +1,69 @@
 import { Router } from "express";
 import prisma from "../prisma";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
+import { asyncHandler } from "../middleware/asyncHandler";
+import { validate } from "../middleware/validate";
+import {
+  createCreatorParamsSchema,
+  createCreatorSchema,
+  updateCreatorSchema,
+  usernameParamSchema,
+} from "../schemas/creators";
+import { ConflictError, NotFoundError, UnauthorizedError } from "../errors/AppError";
 
 const router = Router();
 
-router.get("/", async (req, res) => {
-  const creators = await prisma.creator.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { donations: true }
-  });
-  return res.json(creators);
-});
+router.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const creators = await prisma.creator.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { donations: true },
+    });
+    return res.json(creators);
+  })
+);
 
-router.get("/:username", async (req, res) => {
-  const { username } = req.params;
-  const creator = await prisma.creator.findUnique({
-    where: { username },
-    include: { donations: true }
-  });
+router.get(
+  "/:username",
+  validate({ params: usernameParamSchema }),
+  asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    const creator = await prisma.creator.findUnique({
+      where: { username },
+      include: { donations: true },
+    });
 
-  if (!creator) {
-    return res.status(404).json({ error: "Creator not found" });
-  }
+    if (!creator) {
+      throw new NotFoundError("Creator not found");
+    }
 
-  return res.json(creator);
-});
+    return res.json(creator);
+  })
+);
 
+router.post(
+  "/:username/create",
+  authMiddleware as any,
+  validate({ params: createCreatorParamsSchema, body: createCreatorSchema }),
+  asyncHandler(async (req: AuthRequest, res) => {
+    const { username } = req.params;
+    const { walletAddress, displayName, bio, avatarUrl } = req.body;
 
-router.post("/:username/create", authMiddleware as any, async (req: AuthRequest, res) => {
-  const { username } = req.params;
-  const { walletAddress, displayName, bio, avatarUrl } = req.body;
+    if (!req.user) {
+      throw new UnauthorizedError("User not authenticated");
+    }
 
-  if (!username) {
-    return res.status(400).json({ error: "username is required" });
-  }
-
-  if (!req.user) {
-    return res.status(401).json({ error: "User not authenticated" });
-  }
-
-  try {
     const existing = await prisma.creator.findUnique({ where: { username } });
     if (existing) {
-      return res.status(409).json({ error: "Username already exists" });
+      throw new ConflictError("Username already exists");
     }
 
     const userCreator = await prisma.creator.findUnique({
-      where: { userId: req.user.id }
+      where: { userId: req.user.id },
     });
     if (userCreator) {
-      return res.status(409).json({ error: "User already has a creator profile" });
+      throw new ConflictError("User already has a creator profile");
     }
 
     const creator = await prisma.creator.create({
@@ -59,32 +73,33 @@ router.post("/:username/create", authMiddleware as any, async (req: AuthRequest,
         walletAddress: walletAddress || "",
         displayName,
         bio,
-        avatarUrl
-      }
+        avatarUrl,
+      },
     });
 
     return res.status(201).json(creator);
-  } catch (error) {
-    console.error("Create username error:", error);
-    return res.status(500).json({ error: "Failed to create username" });
-  }
-});
+  })
+);
 
-router.put("/:username", async (req, res) => {
-  const { username } = req.params;
-  const updates = req.body;
+router.put(
+  "/:username",
+  validate({ params: usernameParamSchema, body: updateCreatorSchema }),
+  asyncHandler(async (req, res) => {
+    const { username } = req.params;
+    const updates = req.body;
 
-  try {
+    const existing = await prisma.creator.findUnique({ where: { username } });
+    if (!existing) {
+      throw new NotFoundError("Creator not found");
+    }
+
     const creator = await prisma.creator.update({
       where: { username },
-      data: updates
+      data: updates,
     });
 
     return res.json(creator);
-  } catch (error) {
-    return res.status(404).json({ error: "Creator not found or update failed" });
-  }
-});
+  })
+);
 
 export default router;
-

@@ -1,45 +1,51 @@
 import { Router } from "express";
 import prisma from "../prisma";
+import { asyncHandler } from "../middleware/asyncHandler";
+import { validate } from "../middleware/validate";
+import { createDonationSchema, listDonationsQuerySchema } from "../schemas/donations";
+import { NotFoundError } from "../errors/AppError";
 
 const router = Router();
 
-router.get("/", async (req, res) => {
-  const { creatorUsername } = req.query;
+router.get(
+  "/",
+  validate({ query: listDonationsQuerySchema }),
+  asyncHandler(async (req, res) => {
+    const { creatorUsername } = req.query as { creatorUsername?: string };
 
-  const donations = await prisma.donation.findMany({
-    orderBy: { createdAt: "desc" },
-    ...(creatorUsername
-      ? { where: { creator: { username: String(creatorUsername) } } }
-      : {})
-  });
+    const donations = await prisma.donation.findMany({
+      orderBy: { createdAt: "desc" },
+      ...(creatorUsername ? { where: { creator: { username: creatorUsername } } } : {}),
+    });
 
-  return res.json(donations);
-});
+    return res.json(donations);
+  })
+);
 
-router.post("/", async (req, res) => {
-  const { creatorUsername, senderAddress, amount, currency = "XLM", message, transactionHash } = req.body;
+router.post(
+  "/",
+  validate({ body: createDonationSchema }),
+  asyncHandler(async (req, res) => {
+    const { creatorUsername, senderAddress, amount, currency, message, transactionHash } = req.body;
 
-  if (!creatorUsername || !senderAddress || !amount) {
-    return res.status(400).json({ error: "creatorUsername, senderAddress and amount are required" });
-  }
-
-  const creator = await prisma.creator.findUnique({ where: { username: creatorUsername } });
-  if (!creator) {
-    return res.status(404).json({ error: "Creator not found" });
-  }
-
-  const donation = await prisma.donation.create({
-    data: {
-      creatorId: creator.id,
-      senderAddress,
-      amount: Number(amount),
-      currency,
-      message,
-      transactionHash
+    const creator = await prisma.creator.findUnique({ where: { username: creatorUsername } });
+    if (!creator) {
+      throw new NotFoundError("Creator not found");
     }
-  });
 
-  return res.status(201).json(donation);
-});
+    const donation = await prisma.donation.create({
+      data: {
+        creatorId: creator.id,
+        senderAddress,
+        amount,
+        currency,
+        message,
+        transactionHash,
+      },
+    });
+
+    return res.status(201).json(donation);
+  })
+);
 
 export default router;

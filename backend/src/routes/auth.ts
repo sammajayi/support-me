@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { randomBytes, createHash } from 'crypto';
-import { Keypair, StrKey } from '@stellar/stellar-sdk';
+import { Keypair } from '@stellar/stellar-sdk';
 import prisma from '../prisma';
 import { generateToken } from '../middleware/auth';
+import { asyncHandler } from '../middleware/asyncHandler';
+import { validate } from '../middleware/validate';
+import { challengeSchema, verifySchema } from '../schemas/auth';
+import { UnauthorizedError } from '../errors/AppError';
 
 const router = Router();
 
@@ -16,47 +20,52 @@ interface Challenge {
 
 const challenges = new Map<string, Challenge>();
 
-router.post('/challenge', async (req, res) => {
-  const { walletAddress } = req.body;
+router.post(
+  '/challenge',
+  validate({ body: challengeSchema }),
+  asyncHandler(async (req, res) => {
+    const { walletAddress } = req.body;
 
-  if (!walletAddress || !StrKey.isValidEd25519PublicKey(walletAddress)) {
-    return res.status(400).json({ error: 'A valid Stellar wallet address is required' });
-  }
+    const nonce = randomBytes(16).toString('hex');
+    const message = `Sign in to SupportMe\n\nAddress: ${walletAddress}\nNonce: ${nonce}\nIssued At: ${new Date().toISOString()}`;
 
-  const nonce = randomBytes(16).toString('hex');
-  const message = `Sign in to SupportMe\n\nAddress: ${walletAddress}\nNonce: ${nonce}\nIssued At: ${new Date().toISOString()}`;
+    challenges.set(walletAddress, { message, expiresAt: Date.now() + CHALLENGE_TTL_MS });
 
-  challenges.set(walletAddress, { message, expiresAt: Date.now() + CHALLENGE_TTL_MS });
+    return res.json({ message });
+  })
+);
 
-  return res.json({ message });
-});
+router.post(
+  '/verify',
+  validate({ body: verifySchema }),
+  asyncHandler(async (req, res) => {
+    const { walletAddress, signedMessage } = req.body;
 
-router.post('/verify', async (req, res) => {
-  const { walletAddress, signedMessage } = req.body;
+    const challenge = challenges.get(walletAddress);
+    if (!challenge || challenge.expiresAt < Date.now()) {
+      challenges.delete(walletAddress);
+      throw new UnauthorizedError('Challenge expired or not found, please try again');
+    }
 
-  if (!walletAddress || !signedMessage) {
-    return res.status(400).json({ error: 'walletAddress and signedMessage are required' });
-  }
-
-  const challenge = challenges.get(walletAddress);
-  if (!challenge || challenge.expiresAt < Date.now()) {
-    challenges.delete(walletAddress);
-    return res.status(401).json({ error: 'Challenge expired or not found, please try again' });
-  }
-
-  try {
     const payload = Buffer.concat([
       Buffer.from(STELLAR_SIGNED_MESSAGE_PREFIX, 'utf-8'),
       Buffer.from(challenge.message, 'utf-8'),
     ]);
     const hash = createHash('sha256').update(payload).digest();
-    const signatureValid = Keypair.fromPublicKey(walletAddress).verify(
-      hash,
-      Buffer.from(signedMessage, 'base64')
-    );
+
+    let signatureValid = false;
+    try {
+      signatureValid = Keypair.fromPublicKey(walletAddress).verify(
+        hash,
+        Buffer.from(signedMessage, 'base64')
+      );
+    } catch (error) {
+      console.error('Signature verification error:', error);
+      throw new UnauthorizedError('Signature verification failed');
+    }
 
     if (!signatureValid) {
-      return res.status(401).json({ error: 'Invalid signature' });
+      throw new UnauthorizedError('Invalid signature');
     }
 
     challenges.delete(walletAddress);
@@ -76,10 +85,7 @@ router.post('/verify', async (req, res) => {
       hasProfile: !!creator,
       username: creator?.username,
     });
-  } catch (error) {
-    console.error('Verify error:', error);
-    return res.status(401).json({ error: 'Signature verification failed' });
-  }
-});
+  })
+);
 
 export default router;
