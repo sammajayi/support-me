@@ -3,6 +3,7 @@ import cors from "cors";
 import authRouter from "./routes/auth";
 import creatorsRouter from "./routes/creators";
 import donationsRouter from "./routes/donations";
+import eventsRouter from "./routes/events";
 import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
@@ -17,6 +18,7 @@ app.get("/health", (req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/creators", creatorsRouter);
 app.use("/api/donations", donationsRouter);
+app.use("/api/events", eventsRouter);
 
 app.use((req, res) => {
   return res.status(404).json({ error: "Not Found", code: "NOT_FOUND" });
