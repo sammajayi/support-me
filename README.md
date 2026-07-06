@@ -40,6 +40,15 @@ only reachable through the `donation` contract's cross-contract calls.
 
 ![Connect Wallet modal showing Freighter, xBull, Albedo, Rabet, and LOBSTR options](frontend/public/multi-wallet-integration.png)
 
+## What's New (v3)
+
+- **Real-Time Updates**: A backend Soroban event listener polls the `donation` contract for on-chain events and streams them to connected clients over Server-Sent Events (`GET /api/events`) — the dashboard and creator profile pages update live as donations settle, no polling or refresh needed
+- **Centralized Error Handling & Validation**: All backend routes validate request bodies with Zod schemas and share a single error-handling middleware for consistent error responses
+- **Error Boundaries & Loading Skeletons**: A root Next.js error boundary (`app/error.tsx`) handles unexpected render errors with a retry option, and skeleton screens (mirroring each page's real layout) replace generic spinners on the dashboard, settings, and creator profile pages
+- **Test Suites**: Backend tests with Jest + Supertest (routes, middleware, services), frontend tests with Vitest + React Testing Library (components, auth context, dashboard SSE behavior), and Rust unit/integration tests for both Soroban contracts
+- **CI Pipeline**: GitHub Actions runs contract tests + wasm build, backend build/tests, and frontend type-check/tests/build on every push and pull request to `main`
+- **Mobile Responsive Layout**: Improved responsive behavior across all pages
+
 ## What's New (v2)
 
 - **Wallet Sign-In**: Connect a Stellar wallet and sign a challenge message to log in (no email/password) — JWT issued after signature verification
@@ -57,7 +66,7 @@ only reachable through the `donation` contract's cross-contract calls.
 - **Multi-Wallet Integration**: Connect Freighter, xBull, Albedo, Rabet, or Lobstr via Stellar Wallets Kit
 - **On-Chain Contract Calls**: Donations are settled and recorded through a deployed Soroban contract
 - **Donation Tracking**: Backend-stored donation history with stats
-- **Creator Dashboard**: Real-time analytics and recent supporter feed
+- **Creator Dashboard**: Real-time analytics and recent supporter feed, updated live over SSE
 - **Zero Fees**: 100% of donations go directly to creators
 - **Instant Settlements**: Stellar blockchain ensures fast, secure transactions
 
@@ -69,11 +78,21 @@ only reachable through the `donation` contract's cross-contract calls.
 - **Smart Contract**: Soroban (Rust), deployed to Stellar Testnet
 - **Wallet**: Stellar SDK + Stellar Wallets Kit (Freighter, xBull, Albedo, Rabet, Lobstr)
 - **Auth**: JWT tokens, Stellar wallet sign-message challenge (SEP-0043/SEP-0053) for sign-in
+- **Real-Time**: Server-Sent Events (backend polls Soroban RPC for contract events, streams them to clients)
+- **Testing**: Jest + Supertest (backend), Vitest + React Testing Library (frontend), `cargo test` (contracts)
+- **CI/CD**: GitHub Actions
 
 ## Project Structure
 
 ```
 .
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # CI: contracts (cargo), backend (jest), frontend (vitest)
+├── contracts/                   # Soroban smart contracts (Rust)
+│   ├── donation/                # Settles donations, records on-chain, cross-calls the registry
+│   ├── creator-registry/        # Owns creator profile state and lifetime totals
+│   └── common/                  # Shared types between contracts
 ├── backend/                    # Express API and Prisma schema
 │   ├── prisma/
 │   │   └── schema.prisma       # Database models
@@ -81,9 +100,18 @@ only reachable through the `donation` contract's cross-contract calls.
 │   │   ├── routes/
 │   │   │   ├── auth.ts         # Authentication endpoints
 │   │   │   ├── creators.ts     # Creator profile endpoints
-│   │   │   └── donations.ts    # Donation tracking endpoints
+│   │   │   ├── donations.ts    # Donation tracking endpoints
+│   │   │   └── events.ts       # SSE stream of on-chain donation events
+│   │   ├── services/
+│   │   │   ├── sorobanEventListener.ts  # Polls Soroban RPC for donation events
+│   │   │   └── eventBus.ts     # In-process pub/sub bridging listener → SSE route
 │   │   ├── middleware/
-│   │   │   └── auth.ts         # JWT authentication middleware
+│   │   │   ├── auth.ts         # JWT authentication middleware
+│   │   │   ├── validate.ts     # Zod request validation
+│   │   │   └── errorHandler.ts # Centralized error handling
+│   │   ├── schemas/             # Zod request schemas
+│   │   ├── errors/              # Typed application error classes
+│   │   ├── __tests__/           # Jest + Supertest test suite
 │   │   ├── app.ts              # Express app setup
 │   │   ├── server.ts           # Server entry point
 │   │   └── prisma.ts           # Prisma client
@@ -92,19 +120,21 @@ only reachable through the `donation` contract's cross-contract calls.
 │   ├── app/
 │   │   ├── auth/               # Authentication pages
 │   │   │   └── username/       # Username creation after first wallet sign-in
-│   │   ├── dashboard/          # Creator dashboard
+│   │   ├── dashboard/          # Creator dashboard (SSE-updated, with tests)
 │   │   ├── settings/           # Profile and wallet settings
-│   │   ├── [username]/         # Dynamic creator profile pages
+│   │   ├── [username]/         # Dynamic creator profile pages (SSE-updated)
 │   │   ├── donate/             # Redirect page
+│   │   ├── error.tsx           # Root error boundary
 │   │   ├── layout.tsx          # Root layout with AuthProvider
 │   │   ├── page.jsx            # Landing page
 │   │   └── globals.css
-│   ├── components/             # Reusable React components
+│   ├── components/             # Reusable React components (incl. Skeleton, tested)
 │   ├── context/
-│   │   └── AuthContext.tsx     # Global auth state
+│   │   └── AuthContext.tsx     # Global auth state (tested)
 │   ├── lib/
 │   │   ├── wallet.js           # Multi-wallet connection (Stellar Wallets Kit)
 │   │   └── contract.js         # Soroban donation contract calls
+│   ├── vitest.config.ts        # Vitest + React Testing Library setup
 │   └── package.json
 ├── docs/                       # Architecture documentation
 ├── PRD(v2).md                  # Product requirements
@@ -247,6 +277,15 @@ Frontend will run on `http://localhost:3000`
 - `POST /api/donations` - Record a donation
   - Body: `{ creatorUsername, senderAddress, amount, message, transactionHash }`
 
+### Real-Time Events
+
+- `GET /api/events` - Server-Sent Events stream of on-chain donations. The
+  backend's `SorobanEventListener` polls the Soroban RPC for the `donation`
+  contract's `DonatedEvent`s and republishes them here as they're seen
+  (`event: donation`, `data: { donor, creator, amount, memo, timestamp, txHash }`).
+  The frontend dashboard and creator profile pages subscribe with
+  `EventSource` to update live without polling the REST API.
+
 ## Frontend Pages
 
 - `/` - Landing page (includes "Connect Wallet" sign-in)
@@ -265,6 +304,13 @@ DATABASE_URL=postgresql://user:password@localhost:5432/supportme
 PORT=4000
 JWT_SECRET=your-secret-key-here-change-in-production
 NODE_ENV=development
+
+# Optional: enables the Soroban event listener that powers /api/events (SSE).
+# Without this set, the backend logs a warning and skips event polling.
+NEXT_PUBLIC_DONATION_CONTRACT_ID=CD6T563YCSYQHDMXC7VCFTKMWMXWHFHAU4NO7EAMFK57QLFI7SSXICYY
+# SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+# SOROBAN_EVENTS_POLL_INTERVAL_MS=5000
+# SOROBAN_EVENTS_LOOKBACK_LEDGERS=100
 ```
 
 ### Frontend (.env.local)
@@ -317,6 +363,38 @@ createdAt, updatedAt
 id, creatorId (foreign key), senderAddress, amount (Float),
 currency (default: "XLM"), message, transactionHash, createdAt
 ```
+
+## Testing
+
+Each part of the stack has its own test suite:
+
+```bash
+# Smart contracts (Rust unit + cross-contract integration tests)
+cargo test --workspace
+
+# Backend (Jest + Supertest, Prisma is mocked so no database is needed)
+cd backend
+npm test
+
+# Frontend (Vitest + React Testing Library)
+cd frontend
+npm test
+```
+
+## CI/CD
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs three
+independent jobs on every push and pull request to `main`:
+
+- **Contracts**: `cargo test --workspace`, then a release build to
+  `wasm32v1-none` to confirm both contracts still compile to WASM.
+- **Backend**: `npm run build` (Prisma client generation + `tsc`), then
+  `npm test`.
+- **Frontend**: `npx tsc --noEmit`, then `npm test`, then `npm run build`.
+
+None of the jobs require real secrets or a live database — backend tests
+mock Prisma, and the Prisma client can be generated from `schema.prisma`
+without a reachable `DATABASE_URL`.
 
 ## Deployment
 

@@ -1,30 +1,62 @@
 # SupportMe Architecture
 
-SupportMe is designed as a modern web app with separate frontend and backend layers.
-The current open source roadmap removes any required smart contract dependency and focuses on a backend-driven creator donation experience.
+SupportMe is a Stellar/Soroban-based creator donation platform with three
+layers: on-chain smart contracts that settle and record donations, a
+Node/Express backend that owns off-chain profile data and streams real-time
+updates, and a Next.js frontend that ties wallets, contracts, and the API
+together.
 
 ## Architecture Overview
 
+- **Smart Contracts**: `contracts/`
+  - `donation` and `creator-registry` are two independently deployed Soroban
+    contracts on Stellar Testnet that talk to each other exclusively through
+    cross-contract calls (`env.invoke_contract`).
+  - `donation` moves XLM from donor to creator via the native Stellar Asset
+    Contract, keeps an append-only on-chain donation log, and reports every
+    settled donation to `creator-registry`.
+  - `creator-registry` owns creator profile state (username, lifetime
+    totals) and only accepts `record_donation` calls from the `donation`
+    contract address it was initialized with.
+  - Both contracts have unit test coverage (`cargo test --workspace`) using
+    `soroban-sdk`'s `testutils`, including cross-contract integration tests
+    that register a real `creator-registry` instance in a shared test `Env`.
+
 - **Frontend**: `frontend/`
-  - Next.js app for creator pages, wallet connection, and donation forms.
-  - Provides a user interface for profile creation, supporter flow, and dashboard views.
+  - Next.js (App Router) app for the landing page, creator profile pages,
+    the donation flow, and the creator dashboard/settings.
+  - Connects wallets (Freighter, xBull, Albedo, Rabet, Lobstr) via Stellar
+    Wallets Kit, and calls the `donation` contract directly
+    (`lib/contract.js`: simulate → sign → submit → poll for confirmation).
+  - Subscribes to the backend's SSE stream (`EventSource`) on the dashboard
+    and public profile pages so new donations appear live without polling.
+  - Tested with Vitest + React Testing Library (components, `AuthContext`,
+    and the dashboard page's data/SSE behavior).
 
 - **Backend**: `backend/`
-  - Node.js + Express API.
-  - Uses Prisma for database access.
-  - Stores creator profiles and donation records.
+  - Node.js + Express API, Prisma ORM, PostgreSQL.
+  - Owns everything the contracts don't: user accounts, creator profiles,
+    wallet-signature-based auth (JWT), and a denormalized donation history
+    used for dashboard queries/stats.
+  - Polls the Soroban RPC for `donation` contract events
+    (`services/sorobanEventListener.ts`) and republishes them on an
+    in-process event bus, which `routes/events.ts` streams to connected
+    clients over Server-Sent Events.
+  - Centralized error handling (`errors/`, `middleware/errorHandler.ts`) and
+    Zod-based request validation (`middleware/validate.ts`, `schemas/`).
+  - Tested with Jest + Supertest; Prisma is mocked in tests so the suite
+    never touches a real database.
 
 - **Database**: PostgreSQL
-  - Stores creators, donations, and future metadata.
-  - The backend is compatible with any PostgreSQL-compatible provider.
+  - Stores `User`, `Creator`, and `Donation` records (see README for the
+    schema). Compatible with any PostgreSQL-compatible host (the deployed
+    instance runs on Railway).
 
-- **Wallet Integration**
-  - Frontend uses Stellar/Freighter for wallet connections and payments.
-  - The backend records transactions and creator metadata after payments.
-
-- **Contracts**
-  - Not required for the current MVP and open source contribution path.
-  - The `contracts/` folder may remain as legacy examples but is not part of the current backend-first architecture.
+- **CI**: `.github/workflows/ci.yml`
+  - Three independent GitHub Actions jobs run on every push/PR to `main`:
+    contracts (`cargo test` + a release `wasm32v1-none` build), backend
+    (`tsc`/Prisma generate + `jest`), and frontend (`tsc` + `vitest` +
+    `next build`).
 
 ## Flow Diagram
 
@@ -32,32 +64,54 @@ The current open source roadmap removes any required smart contract dependency a
 flowchart TD
   A[Supporter Browser] -->|opens creator page| B[Frontend Next.js]
   B -->|loads creator profile| C[Backend API]
-  B -->|connects wallet| D[Freighter / Stellar]
-  D -->|sends payment| E[Stellar Testnet]
-  E -->|returns transaction result| B
-  B -->|reports donation| C[Backend API]
-  C -->|writes donation record| F[PostgreSQL]
-  C -->|reads creator data| F
-  B -->|displays dashboard| C
+  B -->|connects wallet| D[Stellar Wallets Kit]
+  D -->|simulate/sign/submit donate| E[donation contract]
+  E -->|cross-contract record_donation| G[creator-registry contract]
+  E -->|emits DonatedEvent| H[Stellar Testnet RPC]
+  B -->|reports donation metadata| C
+  C -->|writes donation record| F[(PostgreSQL)]
+  C -->|reads creator/donation data| F
+  H -->|polled by| I[SorobanEventListener]
+  I -->|publishes to| J[In-process event bus]
+  J -->|streams| K[SSE /api/events]
+  K -->|EventSource| B
+  B -->|displays live dashboard/profile| A
 ```
 
 ## Key Responsibilities
 
+- **Contracts**
+  - Settle donations atomically and trustlessly on-chain (no custody by the
+    backend).
+  - Keep the source of truth for lifetime creator totals via
+    `creator-registry`, independent of the off-chain database.
+
 - **Frontend**
-  - Display creator pages and donation forms
-  - Manage wallet sessions and payment interactions
-  - Send donation metadata to the backend after a successful transfer
+  - Manage wallet sessions, build/sign/submit the `donate` contract
+    invocation, and show live transaction status.
+  - Send donation metadata to the backend after a successful on-chain
+    transfer, and subscribe to SSE for real-time updates from other
+    supporters.
+  - Provide skeleton loading states and a root error boundary
+    (`app/error.tsx`) for a resilient UX while data is loading or a render
+    fails unexpectedly.
 
 - **Backend**
-  - Store creator profile data
-  - Record donation history
-  - Provide endpoints for creator and donation queries
-  - Serve as the integration point for future authentication and reporting
+  - Authenticate users via a signed wallet challenge (no passwords) and
+    issue JWTs.
+  - Store creator profile data and donation history for fast dashboard
+    queries (avoiding a full-ledger scan for every page load).
+  - Bridge on-chain activity to connected clients in real time via the
+    Soroban event listener + SSE endpoint.
+  - Validate all mutating requests with Zod schemas and return consistent
+    error shapes via centralized error-handling middleware.
 
 ## Contribution Focus Areas
 
-- Add creator authentication and session management
-- Expand backend routes for goals, supporters, and reports
-- Add pagination and filtering for dashboards
-- Include payment reconciliation and webhook support
-- Add tests and CI for backend and frontend changes
+- Add pagination and filtering for dashboards and donation history
+- Add integration/e2e tests that exercise the full donate flow against a
+  local Stellar network (e.g. `stellar-cli`'s local sandbox)
+- Add a Railway/production deploy step to the CI workflow, gated on the
+  existing test jobs
+- Support additional Stellar assets (USDC, etc.) beyond native XLM
+- Add embeddable donation widgets for creators to use on other sites
