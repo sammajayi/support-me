@@ -143,6 +143,9 @@ describe('DashboardPage', () => {
     });
 
     await waitFor(() => expect(screen.getByText('live tip')).toBeInTheDocument());
-    expect(toast.success).toHaveBeenCalledWith('New donation received! 🎉');
+    expect(toast.success).toHaveBeenCalledWith(
+      'New donation received!',
+      expect.objectContaining({ icon: expect.anything() })
+    );
   });
 });
