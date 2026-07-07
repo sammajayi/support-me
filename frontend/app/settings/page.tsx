@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { CheckmarkCircleIcon } from '@hugeicons/core-free-icons';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { Skeleton } from '@/components/Skeleton';
@@ -210,8 +212,15 @@ export default function SettingsPage() {
                         Connect Wallet
                       </button>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {walletAddress ? 'Wallet connected ✓' : 'Connect your Freighter wallet to receive tips'}
+                    <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+                      {walletAddress ? (
+                        <>
+                          <HugeiconsIcon icon={CheckmarkCircleIcon} size={14} strokeWidth={1.5} className="text-green-600" />
+                          Wallet connected
+                        </>
+                      ) : (
+                        'Connect your Freighter wallet to receive tips'
+                      )}
                     </p>
                   </div>
                 </div>

@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { AlertCircleIcon } from '@hugeicons/core-free-icons';
 
 export default function GlobalError({
   error,
@@ -17,7 +19,9 @@ export default function GlobalError({
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center px-4">
       <div className="bg-white rounded-lg shadow border border-gray-200 p-8 max-w-md w-full text-center">
-        <div className="text-4xl mb-4">⚠️</div>
+        <div className="flex justify-center mb-4 text-amber-500">
+          <HugeiconsIcon icon={AlertCircleIcon} size={40} strokeWidth={1.5} />
+        </div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Something went wrong</h1>
         <p className="text-gray-600 mb-6">
           An unexpected error occurred. You can try again, or head back home.

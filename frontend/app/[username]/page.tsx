@@ -4,6 +4,8 @@ import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import { toast } from 'sonner';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { PartyIcon } from '@hugeicons/core-free-icons';
 import { connectWallet } from '@/lib/wallet';
 import { sendDonation, DonationError } from '@/lib/contract';
 import { API_URL } from '@/lib/api';
@@ -116,7 +118,9 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
       });
 
       if (payload.donor !== userAddress) {
-        toast.success('New donation received! 🎉');
+        toast.success('New donation received!', {
+          icon: <HugeiconsIcon icon={PartyIcon} size={18} strokeWidth={1.5} />,
+        });
       }
     };
 
@@ -186,7 +190,8 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
         setBalance(parseFloat(xlm?.balance || '0').toFixed(4));
       } catch { }
 
-      toast.success('🎉 Donation sent successfully!', {
+      toast.success('Donation sent successfully!', {
+        icon: <HugeiconsIcon icon={PartyIcon} size={18} strokeWidth={1.5} />,
         description: (
           <a
             href={`https://stellar.expert/explorer/testnet/tx/${hash}`}

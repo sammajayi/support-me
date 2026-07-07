@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { PartyIcon } from '@hugeicons/core-free-icons';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { Skeleton } from '@/components/Skeleton';
@@ -115,7 +117,9 @@ export default function DashboardPage() {
         return [newDonation, ...prev];
       });
 
-      toast.success('New donation received! 🎉');
+      toast.success('New donation received!', {
+        icon: <HugeiconsIcon icon={PartyIcon} size={18} strokeWidth={1.5} />,
+      });
     };
 
     source.addEventListener('donation', handleDonation);
