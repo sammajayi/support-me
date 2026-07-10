@@ -32,6 +32,7 @@ talk to each other exclusively through cross-contract calls
 - **Example transactions**:
   - `register_creator` (bob registers as `bobcreates`): [`91d9cc8f1ed0905fe24a51e7213b582120f2e1fa74cf165b81cfb7f58077625f`](https://stellar.expert/explorer/testnet/tx/91d9cc8f1ed0905fe24a51e7213b582120f2e1fa74cf165b81cfb7f58077625f)
   - `donate` (charlie donates 5 XLM to bob; donation contract cross-calls the registry to update bob's stats): [`804cf80669333df32713d6297e806a7b09b0583cd2c98646315611656d1914b4`](https://stellar.expert/explorer/testnet/tx/804cf80669333df32713d6297e806a7b09b0583cd2c98646315611656d1914b4)
+  - `donate` (10 XLM donation with memo "Manage it"): [`234e100afee6aa560261fe0968b8755739dbc3686370b5fda79294a133ea8611`](https://stellar.expert/explorer/testnet/tx/234e100afee6aa560261fe0968b8755739dbc3686370b5fda79294a133ea8611)
 
 The frontend calls the `donation` contract directly from
 `frontend/lib/contract.js` (simulate → sign → submit → poll for
