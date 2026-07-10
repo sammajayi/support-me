@@ -10,6 +10,10 @@ SupportMe is a creator tipping and donation platform. This enables creators on S
 
 [https://www.loom.com/share/5412cb40d0964d0784dc0ea5030bb6f3](https://www.loom.com/share/5412cb40d0964d0784dc0ea5030bb6f3)
 
+## Mobile Responsive UI
+
+<img src="frontend/public/mobile-responsive.png" alt="SupportMe home page rendered at iPhone mobile viewport (375x812)" width="375" />
+
 ## Smart Contracts (Stellar Testnet)
 
 Donations are split across two independently deployed Soroban contracts that
