@@ -55,7 +55,7 @@ export default function CreateUsernamePage() {
         throw new Error(data.error || 'Failed to create username');
       }
 
-      router.push('/dashboard');
+      router.push('/app');
     } catch (err) {
       setError((err as Error).message);
     } finally {

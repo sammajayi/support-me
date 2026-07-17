@@ -114,25 +114,36 @@ flowchart TD
   - Validate all mutating requests with Zod schemas and return consistent
     error shapes via centralized error-handling middleware.
 
-## Anchor / Fiat Flow (SEP-24 withdraw)
+## Anchor / Fiat Flow (SEP-24 deposit & withdraw)
 
 ```mermaid
 flowchart TD
-  A[Creator on /settings] -->|click Cash Out| B[lib/anchor.js]
+  A[Creator on /settings] -->|Add Funds / Cash Out| B[lib/anchor.js]
   B -->|SEP-1: read stellar.toml| C[Anchor home domain]
   B -->|SEP-10: sign challenge| D[Wallet]
-  B -->|POST withdraw/interactive| E[Anchor transfer server]
-  E -->|hosted URL| F[Interactive popup: KYC + bank details]
+  B -->|POST deposit or withdraw /interactive| E[Anchor transfer server]
+  E -->|hosted URL| F[Interactive popup: KYC + amount / bank details]
   B -->|poll GET /transaction| E
-  B -->|sign + submit payment to anchor| G[Stellar Testnet]
-  E -->|payout| H[Creator's bank account]
+  B -->|withdraw: sign + submit payment to anchor| G[Stellar Testnet]
+  B -->|deposit: sign changeTrust on pending_trust| G
+  E -->|withdraw payout| H[Creator's bank account]
+  E -->|deposit: credit asset to wallet| G
 ```
 
 On testnet this points at the SDF reference anchor (`testanchor.stellar.org`,
 asset `SRT`) — no signup, cost, or partnership. The same code targets a real
-NGN anchor on mainnet by changing `NEXT_PUBLIC_ANCHOR_*` env vars. Fan-side
-fiat on-ramp (SEP-24 deposit) and path-payment auto-settlement are documented
-in [PRD(v3)](../PRD(v3).md) but intentionally out of scope for this iteration.
+NGN anchor on mainnet by changing `NEXT_PUBLIC_ANCHOR_*` env vars.
+
+Both SEP-24 legs are implemented in `lib/anchor.js`: **withdraw** (`runWithdraw`,
+signs an on-chain payment to the anchor) and **deposit** (`runDeposit`, adds a
+trustline when the anchor parks at `pending_trust`, then lets the anchor credit
+the asset). Path-payment auto-settlement (tip in one asset → payout in another)
+remains out of scope, documented in [PRD(v3)](../PRD(v3).md).
+
+**Auth limitation:** only SEP-10 is implemented, which covers classic (`G...`)
+and muxed (`M...`) accounts. Contract accounts (`C...`, smart wallets) would
+require SEP-45 (Soroban authorization entries verified via RPC), which is not
+implemented — sufficient for the Freighter `G...` account used on testnet.
 
 ## Contribution Focus Areas
 

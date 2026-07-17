@@ -83,14 +83,25 @@ router.post(
 
 router.put(
   "/:username",
+  authMiddleware as any,
   validate({ params: usernameParamSchema, body: updateCreatorSchema }),
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: AuthRequest, res) => {
     const { username } = req.params;
     const updates = req.body;
+
+    if (!req.user) {
+      throw new UnauthorizedError("User not authenticated");
+    }
 
     const existing = await prisma.creator.findUnique({ where: { username } });
     if (!existing) {
       throw new NotFoundError("Creator not found");
+    }
+
+    // A profile can only be edited by its owner — otherwise anyone could
+    // overwrite another creator's payout wallet and redirect their donations.
+    if (existing.userId !== req.user.id) {
+      throw new UnauthorizedError("You can only edit your own profile");
     }
 
     const creator = await prisma.creator.update({

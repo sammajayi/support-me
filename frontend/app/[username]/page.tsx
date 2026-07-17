@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
-import Link from 'next/link';
+import { useState, useEffect, useMemo, use } from 'react';
+import Image from 'next/image';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import { toast } from 'sonner';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -9,26 +9,33 @@ import { PartyIcon } from '@hugeicons/core-free-icons';
 import { connectWallet } from '@/lib/wallet';
 import { sendDonation, DonationError } from '@/lib/contract';
 import { availableAssetCodes, getAsset } from '@/lib/assets';
+import { getPlatform } from '@/lib/socials';
 import { API_URL } from '@/lib/api';
 import { Skeleton } from '@/components/Skeleton';
+import { TipJarLoader } from '@/components/TipJarLoader';
 
 const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const server = new StellarSdk.Horizon.Server(HORIZON_URL);
 
 const STATUS_LABELS: Record<string, string> = {
-  building: 'Preparing transaction...',
-  simulating: 'Simulating on the network...',
-  'awaiting-signature': 'Waiting for wallet signature...',
-  submitting: 'Submitting transaction...',
-  pending: 'Confirming on the network...',
+  building: 'Preparing transaction…',
+  simulating: 'Simulating on the network…',
+  'awaiting-signature': 'Waiting for wallet signature…',
+  submitting: 'Submitting transaction…',
+  pending: 'Confirming on the network…',
 };
 
 interface Creator {
   id: number;
   username: string;
-  displayName: string;
+  displayName: string | null;
   walletAddress: string;
-  bio: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  socialLinks: Record<string, string> | null;
+  acceptsXlm: boolean;
+  acceptsUsdc: boolean;
+  donationGoal: number | null;
   donations: Donation[];
 }
 
@@ -47,7 +54,7 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
   const [creator, setCreator] = useState<Creator | null>(null);
   const [donations, setDonations] = useState<Donation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [notFound, setNotFound] = useState(false);
 
   const [userAddress, setUserAddress] = useState<string | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
@@ -60,30 +67,45 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
   const [txStatus, setTxStatus] = useState<string | null>(null);
 
   const presets = ['1', '5', '10', '20'];
-  const assetCodes = availableAssetCodes();
+
+  // Only offer assets the creator actually accepts, intersected with what this
+  // deployment supports (USDC only appears when an issuer is configured).
+  const assetCodes = useMemo(() => {
+    if (!creator) return [];
+    return availableAssetCodes().filter((code) => {
+      if (code === 'XLM') return creator.acceptsXlm;
+      if (code === 'USDC') return creator.acceptsUsdc;
+      return true;
+    });
+  }, [creator]);
 
   useEffect(() => {
     const fetchCreator = async () => {
       try {
         const res = await fetch(`${API_URL}/api/creators/${username}`);
-        if (!res.ok) {
-          throw new Error('Creator not found');
-        }
-        const data = await res.json();
+        if (!res.ok) throw new Error('Creator not found');
+        const data: Creator = await res.json();
         setCreator(data);
         setDonations(data.donations || []);
-      } catch (err) {
-        setError((err as Error).message);
+      } catch {
+        setNotFound(true);
       } finally {
         setLoading(false);
       }
     };
-
     fetchCreator();
   }, [username]);
 
-  // Subscribe to the backend's SSE stream so new on-chain donations for this
-  // creator show up live for anyone viewing the page, without a refresh.
+  // Default the selected asset to the first one the creator accepts, once the
+  // profile loads.
+  useEffect(() => {
+    if (assetCodes.length > 0 && !assetCodes.includes(assetCode)) {
+      setAssetCode(assetCodes[0]);
+    }
+  }, [assetCodes, assetCode]);
+
+  // Subscribe to the backend's SSE stream so a live donation bumps the goal
+  // progress without a refresh.
   useEffect(() => {
     if (!creator?.walletAddress) return;
 
@@ -119,12 +141,6 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
         };
         return [newDonation, ...prev];
       });
-
-      if (payload.donor !== userAddress) {
-        toast.success('New donation received!', {
-          icon: <HugeiconsIcon icon={PartyIcon} size={18} strokeWidth={1.5} />,
-        });
-      }
     };
 
     source.addEventListener('donation', handleDonation);
@@ -133,10 +149,10 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
       source.removeEventListener('donation', handleDonation);
       source.close();
     };
-  }, [creator?.walletAddress, userAddress]);
+  }, [creator?.walletAddress]);
 
-  // Read the connected wallet's balance for whichever asset is selected.
-  // Falls back to '0.0000' when the wallet holds no trustline/balance for it.
+  // Read the connected wallet's balance for whichever asset is selected. Falls
+  // back to null when the wallet holds no trustline/balance for it.
   const loadAssetBalance = async (address: string, code: string) => {
     try {
       const account = await server.loadAccount(address);
@@ -183,8 +199,8 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
         onStatus: setTxStatus,
       });
 
-      // Record donation in database, tagging it with the asset that was sent
-      // so the dashboard and profile can show XLM vs USDC correctly.
+      // Record the donation, tagging it with the asset that was sent so the
+      // dashboard can split XLM vs USDC volume.
       await fetch(`${API_URL}/api/donations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -198,7 +214,6 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
         }),
       });
 
-      // Refresh balance for the asset just sent
       setBalance(await loadAssetBalance(userAddress, assetCode));
 
       toast.success('Donation sent successfully!', {
@@ -217,10 +232,9 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
       setDonationAmount('5');
       setDonationMessage('');
     } catch (err) {
-      // Three distinct, user-facing error categories:
-      // 'wallet' (not connected / signing rejected), 'simulation' (invalid
-      // amount, insufficient balance, contract precondition), 'network'
-      // (RPC/submission/confirmation failure).
+      // Three user-facing categories: 'wallet' (not connected / signing
+      // rejected), 'simulation' (invalid amount, insufficient balance), and
+      // 'network' (RPC/submission/confirmation failure).
       if (err instanceof DonationError) {
         const titles: Record<string, string> = {
           wallet: 'Wallet error',
@@ -240,241 +254,211 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
   if (loading) {
     return (
       <div className="min-h-screen bg-background py-10 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="card-brutal p-8 mb-8 text-center">
-            <Skeleton className="h-9 w-64 mx-auto mb-3" />
+        <div className="max-w-md mx-auto">
+          <div className="card-brutal p-8 text-center">
+            <Skeleton className="h-24 w-24 rounded-full mx-auto mb-4" />
+            <Skeleton className="h-8 w-48 mx-auto mb-2" />
             <Skeleton className="h-5 w-32 mx-auto mb-6" />
-            <div className="grid md:grid-cols-3 gap-4 mt-6 pt-6 border-t-2 border-ink">
-              {[0, 1, 2].map((i) => (
-                <div key={i}>
-                  <Skeleton className="h-4 w-24 mx-auto mb-2" />
-                  <Skeleton className="h-7 w-16 mx-auto" />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="md:col-span-1">
-              <div className="card-brutal p-6">
-                <Skeleton className="h-5 w-40 mb-4" />
-                <Skeleton className="h-12 w-full" />
-              </div>
-            </div>
-            <div className="md:col-span-2">
-              <div className="card-brutal p-6">
-                <Skeleton className="h-5 w-40 mb-4" />
-                <div className="space-y-3">
-                  {[0, 1, 2].map((i) => (
-                    <Skeleton key={i} className="h-16 w-full" />
-                  ))}
-                </div>
-              </div>
-            </div>
+            <Skeleton className="h-10 w-full" />
           </div>
         </div>
       </div>
     );
   }
 
-  if (error || !creator) {
+  if (notFound || !creator) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="text-center card-brutal p-8 max-w-md">
-          <p className="text-ink font-bold mb-4">{error || 'Creator not found'}</p>
-          <Link href="/" className="text-primary hover:underline font-bold">
-            Back to home
-          </Link>
+        <div className="card-brutal p-10 text-center max-w-md">
+          <h1 className="text-2xl font-extrabold text-ink mb-2">Creator not found</h1>
+          <p className="text-muted font-medium">
+            No profile exists for <span className="font-mono">@{username}</span>.
+          </p>
         </div>
       </div>
     );
   }
 
-  const recentDonations = [...donations]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
+  const socialLinks = creator.socialLinks || {};
+  const socialEntries = Object.entries(socialLinks).filter(([, url]) => url);
+
+  const goal = creator.donationGoal;
+  const xlmReceived = donations
+    .filter((d) => d.currency === 'XLM')
+    .reduce((sum, d) => sum + d.amount, 0);
+  const goalPct = goal ? Math.min(100, (xlmReceived / goal) * 100) : 0;
+
+  const displayName = creator.displayName || creator.username;
 
   return (
     <div className="min-h-screen bg-background py-10 px-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Creator Header */}
-        <div className="card-brutal p-8 mb-8 text-center">
-          <h1 className="text-4xl font-extrabold text-ink mb-2 tracking-tight">
-            {creator.displayName || creator.username}
-          </h1>
-          <p className="text-muted text-xl mb-4 font-bold">@{creator.username}</p>
-          {creator.bio && <p className="text-ink/70 mb-6 font-medium">{creator.bio}</p>}
-
-          <div className="grid md:grid-cols-3 gap-4 mt-6 pt-6 border-t-2 border-ink">
-            <div>
-              <p className="text-muted text-sm font-bold">Total Donations</p>
-              <p className="text-2xl font-extrabold text-primary">
-                {donations.length}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted text-sm font-bold">Total Received</p>
-              <p className="text-2xl font-extrabold text-primary">
-                {donations.reduce((sum, d) => sum + d.amount, 0).toFixed(2)} XLM
-              </p>
-            </div>
-            <div>
-              <p className="text-muted text-sm font-bold">Average Donation</p>
-              <p className="text-2xl font-extrabold text-primary">
-                {donations.length > 0
-                  ? (donations.reduce((sum, d) => sum + d.amount, 0) / donations.length).toFixed(2)
-                  : 0} XLM
-              </p>
-            </div>
+      <div className="max-w-md mx-auto space-y-6">
+        {/* Creator header */}
+        <div className="card-brutal p-8 text-center">
+          <div className="w-24 h-24 mx-auto mb-4 rounded-full border-4 border-ink overflow-hidden bg-accent-bg flex items-center justify-center">
+            {creator.avatarUrl ? (
+              <Image
+                src={creator.avatarUrl}
+                alt={displayName}
+                width={96}
+                height={96}
+                className="w-full h-full object-cover"
+                unoptimized
+              />
+            ) : (
+              <span className="text-3xl font-extrabold text-muted">
+                {displayName.charAt(0).toUpperCase()}
+              </span>
+            )}
           </div>
+
+          <h1 className="text-3xl font-extrabold text-ink mb-1 tracking-tight">{displayName}</h1>
+          <p className="text-muted font-bold mb-4">@{creator.username}</p>
+          {creator.bio && <p className="text-ink/70 font-medium mb-4">{creator.bio}</p>}
+
+          {socialEntries.length > 0 && (
+            <div className="flex items-center justify-center gap-3">
+              {socialEntries.map(([key, url]) => {
+                const platform = getPlatform(key);
+                if (!platform) return null;
+                return (
+                  <a
+                    key={key}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={platform.label}
+                    title={platform.label}
+                    className="text-ink hover:text-primary transition-colors"
+                  >
+                    <HugeiconsIcon icon={platform.icon} size={24} strokeWidth={2} />
+                  </a>
+                );
+              })}
+            </div>
+          )}
+
+          {goal && (
+            <div className="mt-6 pt-6 border-t-2 border-ink text-left">
+              <div className="flex justify-between text-sm font-bold text-ink mb-2">
+                <span>{xlmReceived.toFixed(0)} / {goal} XLM</span>
+                <span>{goalPct.toFixed(0)}%</span>
+              </div>
+              <div
+                className="h-3 border-2 border-ink rounded-full overflow-hidden bg-accent-bg"
+                role="progressbar"
+                aria-valuenow={Math.round(goalPct)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div className="h-full bg-brand-lime" style={{ width: `${goalPct}%` }} />
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          {/* Donation Card */}
-          <div className="md:col-span-1">
-            <div className="card-brutal p-6 md:sticky md:top-8">
-              <h2 className="text-lg font-extrabold text-ink mb-4">Support {creator.displayName || creator.username}</h2>
+        {/* Donation card */}
+        <div className="card-brutal p-6">
+          <h2 className="text-lg font-extrabold text-ink mb-4">Support {displayName}</h2>
 
-              {!userAddress ? (
-                <button
-                  onClick={handleConnectWallet}
-                  disabled={connecting}
-                  className="btn-brutal btn-brutal-primary w-full mb-4"
-                >
-                  {connecting ? 'Connecting...' : 'Connect Wallet'}
-                </button>
-              ) : (
-                <>
-                  <div className="card-brutal bg-brand-lime p-3 mb-4 text-sm">
-                    <p className="text-ink font-medium">Wallet: {userAddress.slice(0, 8)}...</p>
-                    <p className="text-ink font-extrabold mt-1">
-                      {balance ?? '0.0000'} {assetCode}
-                    </p>
-                  </div>
-
-                  <div className="space-y-4">
-                    {assetCodes.length > 1 && (
-                      <div>
-                        <label className="block text-sm font-bold text-ink mb-2">
-                          Asset
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {assetCodes.map((code) => (
-                            <button
-                              key={code}
-                              onClick={async () => {
-                                setAssetCode(code);
-                                if (userAddress) {
-                                  setBalance(await loadAssetBalance(userAddress, code));
-                                }
-                              }}
-                              className={`btn-brutal text-sm px-0 py-2 ${
-                                assetCode === code ? 'btn-brutal-primary' : 'btn-brutal-white'
-                              }`}
-                            >
-                              {code}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="block text-sm font-bold text-ink mb-2">
-                        Amount ({assetCode})
-                      </label>
-                      <input
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={donationAmount}
-                        onChange={(e) => setDonationAmount(e.target.value)}
-                        className="input-brutal"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-4 gap-2">
-                      {presets.map((preset) => (
-                        <button
-                          key={preset}
-                          onClick={() => setDonationAmount(preset)}
-                          className={`btn-brutal text-sm px-0 py-2 ${
-                            donationAmount === preset
-                              ? 'btn-brutal-primary'
-                              : 'btn-brutal-white'
-                          }`}
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-bold text-ink mb-2">
-                        Message (Optional)
-                      </label>
-                      <textarea
-                        value={donationMessage}
-                        onChange={(e) => setDonationMessage(e.target.value)}
-                        maxLength={28}
-                        placeholder="Thanks for your work!"
-                        className="input-brutal text-sm"
-                        rows={3}
-                      />
-                      <p className="text-xs text-muted mt-1 font-medium">
-                        {donationMessage.length}/28
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={handleSendDonation}
-                      disabled={sending || !creator.walletAddress}
-                      className="btn-brutal btn-brutal-lime w-full"
-                    >
-                      {sending ? 'Sending...' : 'Send Donation'}
-                    </button>
-
-                    {txStatus && STATUS_LABELS[txStatus] && (
-                      <p className="text-sm text-ink text-center animate-pulse font-bold">
-                        {STATUS_LABELS[txStatus]}
-                      </p>
-                    )}
-                  </div>
-                </>
+          {sending ? (
+            <div className="py-2">
+              <TipJarLoader fullScreen={false} />
+              {txStatus && STATUS_LABELS[txStatus] && (
+                <p className="text-sm text-ink text-center animate-pulse font-bold mt-2">
+                  {STATUS_LABELS[txStatus]}
+                </p>
               )}
             </div>
-          </div>
+          ) : !userAddress ? (
+            <button
+              onClick={handleConnectWallet}
+              disabled={connecting}
+              className="btn-brutal btn-brutal-primary w-full"
+            >
+              {connecting ? 'Connecting…' : 'Connect Wallet'}
+            </button>
+          ) : (
+            <div className="space-y-4">
+              <div className="card-brutal bg-brand-lime p-3 text-sm">
+                <p className="text-ink font-medium">Wallet: {userAddress.slice(0, 8)}…</p>
+                <p className="text-ink font-extrabold mt-1">
+                  {balance ?? '0.0000'} {assetCode}
+                </p>
+              </div>
 
-          {/* Recent Donors */}
-          <div className="md:col-span-2">
-            <div className="card-brutal p-6">
-              <h2 className="text-lg font-extrabold text-ink mb-4">Recent Supporters</h2>
-              {recentDonations.length === 0 ? (
-                <p className="text-muted font-medium">Be the first to support this creator!</p>
-              ) : (
-                <div className="space-y-3">
-                  {recentDonations.map((donation) => (
-                    <div key={donation.id} className="flex items-start justify-between p-4 bg-background border-2 border-ink rounded-xl">
-                      <div className="flex-1">
-                        <p className="font-bold text-ink">
-                          {donation.senderAddress.slice(0, 8)}...
-                        </p>
-                        {donation.message && (
-                          <p className="text-sm text-muted mt-1 font-medium">"{donation.message}"</p>
-                        )}
-                        <p className="text-xs text-muted mt-1 font-medium">
-                          {new Date(donation.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <p className="font-extrabold text-primary">
-                        {donation.amount} {donation.currency}
-                      </p>
-                    </div>
-                  ))}
+              {assetCodes.length > 1 && (
+                <div>
+                  <label className="block text-sm font-bold text-ink mb-2">Asset</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {assetCodes.map((code) => (
+                      <button
+                        key={code}
+                        onClick={async () => {
+                          setAssetCode(code);
+                          if (userAddress) {
+                            setBalance(await loadAssetBalance(userAddress, code));
+                          }
+                        }}
+                        className={`btn-brutal text-sm px-0 py-2 ${
+                          assetCode === code ? 'btn-brutal-primary' : 'btn-brutal-white'
+                        }`}
+                      >
+                        {code}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
+
+              <div>
+                <label className="block text-sm font-bold text-ink mb-2">Amount ({assetCode})</label>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={donationAmount}
+                  onChange={(e) => setDonationAmount(e.target.value)}
+                  className="input-brutal"
+                />
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                {presets.map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => setDonationAmount(preset)}
+                    className={`btn-brutal text-sm px-0 py-2 ${
+                      donationAmount === preset ? 'btn-brutal-primary' : 'btn-brutal-white'
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-ink mb-2">Message (Optional)</label>
+                <textarea
+                  value={donationMessage}
+                  onChange={(e) => setDonationMessage(e.target.value)}
+                  maxLength={28}
+                  placeholder="Thanks for your work!"
+                  className="input-brutal text-sm"
+                  rows={3}
+                />
+                <p className="text-xs text-muted mt-1 font-medium">{donationMessage.length}/28</p>
+              </div>
+
+              <button
+                onClick={handleSendDonation}
+                disabled={sending || !creator.walletAddress}
+                className="btn-brutal btn-brutal-lime w-full"
+              >
+                Send Donation
+              </button>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

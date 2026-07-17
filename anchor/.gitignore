@@ -1,0 +1,9 @@
+# Generated at runtime by setup.sh from the *.template files — contain the
+# distribution account's SECRET seed (paymentSigningSeed), so never commit them.
+config/reference-config.yaml
+config/stellar.localhost.toml
+config/assets.yaml
+
+# Any local override / secret files
+*.local
+.env.generated

@@ -16,6 +16,16 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/dashboard',
+}));
+
+// AppNav renders WalletMenu, which pulls in wallet/kit internals we don't need
+// under test. Stub it to a marker so the nav renders without that machinery.
+vi.mock('@/components/AppNav', () => ({
+  AppNav: () => <nav data-testid="app-nav" />,
+}));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -111,15 +121,22 @@ describe('DashboardPage', () => {
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
   });
 
-  it('renders stats and recent donations once data has loaded', async () => {
+  it('renders volume split and recent donations once data has loaded', async () => {
     mockFetchByUrl({ creators: [creator], donations: [donation] });
 
     render(<DashboardPage />);
 
     await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
 
-    expect(screen.getByText('Total Earned').nextElementSibling).toHaveTextContent('5.00 XLM');
+    // The single 5 XLM donation shows up as XLM volume, with USDC at zero.
+    expect(screen.getByText('XLM Volume').nextElementSibling).toHaveTextContent('5.00 XLM');
+    expect(screen.getByText('USDC Volume').nextElementSibling).toHaveTextContent('0.00 USDC');
     expect(screen.getByText('nice work')).toBeInTheDocument();
+
+    // The creator loads, so the SSE effect subscribes. Wait for it here so the
+    // effect runs while EventSource is still stubbed — otherwise it flushes
+    // after afterEach tears the stub down and throws "EventSource is not defined".
+    await waitFor(() => expect(FakeEventSource.instances.length).toBe(1));
   });
 
   it('prompts profile creation when the user has no creator profile yet', async () => {

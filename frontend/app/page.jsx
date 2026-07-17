@@ -85,7 +85,7 @@ export default function Home() {
     setError('')
     try {
       const { hasProfile } = await loginWithWallet()
-      router.push(hasProfile ? '/dashboard' : '/auth/username')
+      router.push(hasProfile ? '/app' : '/auth/username')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -105,8 +105,8 @@ export default function Home() {
             <a href="#features" className="font-bold text-ink hover:text-primary transition">Features</a>
             <a href="#how-it-works" className="font-bold text-ink hover:text-primary transition">How it Works</a>
             {user && (
-              <Link href="/dashboard" className="font-bold text-ink hover:text-primary transition">
-                Dashboard
+              <Link href="/app" className="font-bold text-ink hover:text-primary transition">
+                App
               </Link>
             )}
           </div>
@@ -149,8 +149,8 @@ export default function Home() {
             )}
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               {user ? (
-                <Link href="/dashboard" className="btn-brutal btn-brutal-primary text-lg">
-                  Go to Dashboard
+                <Link href="/app" className="btn-brutal btn-brutal-primary text-lg">
+                  Open App
                 </Link>
               ) : (
                 <>
@@ -248,8 +248,8 @@ export default function Home() {
             Set up your creator page in minutes. Take tips in crypto, cash out in your currency.
           </p>
           {user ? (
-            <Link href="/dashboard" className="btn-brutal btn-brutal-white text-lg inline-block">
-              Go to Dashboard
+            <Link href="/app" className="btn-brutal btn-brutal-white text-lg inline-block">
+              Open App
             </Link>
           ) : (
             <button

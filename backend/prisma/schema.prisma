@@ -25,6 +25,8 @@ model Creator {
   bio           String?
   avatarUrl     String?
   socialLinks   Json?
+  acceptsXlm    Boolean    @default(true)
+  acceptsUsdc   Boolean    @default(true)
   donationGoal  Int?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt

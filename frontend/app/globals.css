@@ -125,7 +125,9 @@ input[type="number"] {
     opacity: 1;
   }
   100% {
-    transform: translateY(190px);
+    /* Lands down in the coin pile (~y=224 in SVG space) so the drop reads as
+       a coin falling into the jar, not stopping at the label band. */
+    transform: translateY(224px);
     opacity: 1;
   }
 }

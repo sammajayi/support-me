@@ -20,6 +20,7 @@ const horizon = new StellarSdk.Horizon.Server('https://horizon-testnet.stellar.o
 export class AnchorError extends Error {
   constructor(step, message, cause) {
     super(message);
+    this.name = 'AnchorError';
     this.step = step;
     this.cause = cause;
   }
@@ -32,9 +33,16 @@ export class AnchorError extends Error {
  * @param {string} [assetCode]
  */
 export async function loadAnchorConfig(homeDomain = HOME_DOMAIN, assetCode = ASSET_CODE) {
+  // The TOML resolver is HTTPS-only by default. A local dev anchor is served
+  // over plain http://localhost:8080, so allow cleartext ONLY for localhost —
+  // never for a real anchor, where http would be an unacceptable downgrade.
+  const isLocal = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(homeDomain);
   let toml;
   try {
-    toml = await StellarSdk.StellarToml.Resolver.resolve(homeDomain);
+    toml = await StellarSdk.StellarToml.Resolver.resolve(
+      homeDomain,
+      isLocal ? { allowHttp: true } : undefined,
+    );
   } catch (err) {
     throw new AnchorError('toml', `Could not read the anchor's stellar.toml for ${homeDomain}.`, err);
   }
@@ -67,6 +75,15 @@ export async function loadAnchorConfig(homeDomain = HOME_DOMAIN, assetCode = ASS
 /**
  * SEP-10: fetch a challenge transaction, have the wallet sign it, and exchange
  * the signed XDR for a short-lived anchor auth token (JWT).
+ *
+ * LIMITATION: this is SEP-10 only, so it authenticates classic (`G...`) and
+ * muxed (`M...`) accounts. Contract accounts (`C...`, smart wallets) require
+ * SEP-45 (challenge is a Soroban authorization entry verified via RPC against
+ * the anchor's WEB_AUTH_CONTRACT_ID), which is not implemented here. Adding it
+ * would mean: read WEB_AUTH_FOR_CONTRACTS_ENDPOINT + WEB_AUTH_CONTRACT_ID from
+ * the TOML, branch on account type, and run the SEP-45 GET/POST auth entry
+ * flow. Freighter on testnet uses a `G...` account, so SEP-10 is sufficient
+ * for the current flow.
  */
 export async function authenticate(config, account) {
   let challengeXdr;
@@ -299,7 +316,51 @@ export async function sendWithdrawPayment(config, account, tx) {
   }
 }
 
-const TERMINAL_STATUSES = ['completed', 'refunded', 'error', 'expired', 'no_market'];
+/**
+ * A Stellar account can't hold a non-native asset until it trusts the issuer.
+ * On deposit the anchor waits at `pending_trust` until this line exists, so we
+ * build a changeTrust op, sign it with the wallet, and submit to Horizon.
+ * Idempotent-ish: if the trustline already exists this is a harmless no-op
+ * change, but callers only invoke it when the anchor asks (pending_trust).
+ */
+export async function ensureTrustline(config, account) {
+  let source;
+  try {
+    source = await horizon.loadAccount(account);
+  } catch (err) {
+    throw new AnchorError('trustline', 'Could not load your account to add the asset trustline.', err);
+  }
+
+  const asset = new StellarSdk.Asset(config.assetCode, config.assetIssuer);
+  const built = new StellarSdk.TransactionBuilder(source, {
+    fee: StellarSdk.BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(StellarSdk.Operation.changeTrust({ asset }))
+    .setTimeout(180)
+    .build();
+
+  let signedXdr;
+  try {
+    const result = await signWithWallet(built.toXDR(), account);
+    signedXdr = result.signedTxXdr;
+  } catch (err) {
+    throw new AnchorError('trustline-sign', `Signing the ${config.assetCode} trustline was cancelled or failed.`, err);
+  }
+
+  try {
+    const signedTx = StellarSdk.TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE);
+    const res = await horizon.submitTransaction(signedTx);
+    return res.hash;
+  } catch (err) {
+    throw new AnchorError('trustline-submit', `Failed to add the ${config.assetCode} trustline on the network.`, err);
+  }
+}
+
+// SEP-24 terminal transaction statuses. Once the anchor reports one of these,
+// the flow is over and polling stops. (`no_market` is a SEP-6 status, not
+// SEP-24, so it's intentionally not here.)
+const TERMINAL_STATUSES = ['completed', 'refunded', 'error', 'expired'];
 
 /**
  * Poll GET /transaction?id= until the withdrawal reaches a terminal status.
@@ -415,12 +476,21 @@ export async function runDeposit(account, { onStatus } = {}) {
   // popup, new tab, or full redirect-back — see runWithdraw).
   const handle = openInteractive(url);
 
-  // Deposit needs no wallet signature — just track the anchor until it credits
-  // the asset (or lands in another terminal state).
+  // Deposit needs no on-chain payment, but the account must trust the asset
+  // before the anchor can credit it. If the anchor parks at `pending_trust`,
+  // establish the trustline (one wallet signature) and let polling continue.
   onStatus?.('pending');
+  let trusted = false;
   try {
     const result = await pollWithdraw(config, authToken, id, {
-      onStatus: (status, polledTx) => onStatus?.(status, polledTx),
+      onStatus: async (status, polledTx) => {
+        onStatus?.(status, polledTx);
+        if (status === 'pending_trust' && !trusted) {
+          trusted = true;
+          onStatus?.('adding-trustline', polledTx);
+          await ensureTrustline(config, account);
+        }
+      },
     });
     return result;
   } finally {

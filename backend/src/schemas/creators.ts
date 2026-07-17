@@ -25,5 +25,8 @@ export const updateCreatorSchema = z.object({
   avatarUrl: z.string().url().optional(),
   walletAddress: z.string().optional(),
   socialLinks: z.record(z.string(), z.string()).optional(),
-  donationGoal: z.number().int().positive().optional(),
+  acceptsXlm: z.boolean().optional(),
+  acceptsUsdc: z.boolean().optional(),
+  // null clears a previously-set goal; a positive integer sets it.
+  donationGoal: z.number().int().positive().nullable().optional(),
 });

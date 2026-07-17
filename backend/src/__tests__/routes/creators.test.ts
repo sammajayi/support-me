@@ -117,21 +117,47 @@ describe("POST /api/creators/:username/create", () => {
 });
 
 describe("PUT /api/creators/:username", () => {
+  const token = generateToken(1, "GUSERADDRESS");
+
+  it("rejects requests without an auth token", async () => {
+    const res = await request(app).put("/api/creators/bob").send({ bio: "hi" });
+    expect(res.status).toBe(401);
+  });
+
   it("returns 404 when updating a creator that does not exist", async () => {
     mockedPrisma.creator.findUnique.mockResolvedValue(null);
 
-    const res = await request(app).put("/api/creators/missing").send({ bio: "hi" });
+    const res = await request(app)
+      .put("/api/creators/missing")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ bio: "hi" });
 
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("NOT_FOUND");
   });
 
-  it("updates an existing creator", async () => {
-    mockedPrisma.creator.findUnique.mockResolvedValue({ id: 1, username: "bob" });
-    const updated = { id: 1, username: "bob", bio: "hi there" };
+  it("rejects editing a profile the authenticated user does not own", async () => {
+    // Token is for userId 1; this profile belongs to userId 2.
+    mockedPrisma.creator.findUnique.mockResolvedValue({ id: 9, userId: 2, username: "bob" });
+
+    const res = await request(app)
+      .put("/api/creators/bob")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ bio: "hijack" });
+
+    expect(res.status).toBe(401);
+    expect(mockedPrisma.creator.update).not.toHaveBeenCalled();
+  });
+
+  it("updates a creator the authenticated user owns", async () => {
+    mockedPrisma.creator.findUnique.mockResolvedValue({ id: 1, userId: 1, username: "bob" });
+    const updated = { id: 1, userId: 1, username: "bob", bio: "hi there" };
     mockedPrisma.creator.update.mockResolvedValue(updated);
 
-    const res = await request(app).put("/api/creators/bob").send({ bio: "hi there" });
+    const res = await request(app)
+      .put("/api/creators/bob")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ bio: "hi there" });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual(updated);

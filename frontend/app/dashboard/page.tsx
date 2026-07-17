@@ -7,6 +7,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { PartyIcon } from '@hugeicons/core-free-icons';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { AppNav } from '@/components/AppNav';
 import { Skeleton } from '@/components/Skeleton';
 import { TipChart } from '@/components/TipChart';
 import { usePrices } from '@/lib/usePrices';
@@ -141,25 +142,23 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-background py-10 px-4">
-          <div className="max-w-6xl mx-auto">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
-              <Skeleton className="h-9 w-40" />
-              <Skeleton className="h-10 w-28" />
-            </div>
+        <div className="min-h-screen bg-background">
+          <AppNav />
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+            <Skeleton className="h-9 w-40 mb-8" />
 
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
-              {[0, 1, 2].map((i) => (
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              {[0, 1].map((i) => (
                 <div key={i} className="card-brutal p-6">
                   <Skeleton className="h-4 w-28 mb-3" />
-                  <Skeleton className="h-8 w-16" />
+                  <Skeleton className="h-8 w-24" />
                 </div>
               ))}
             </div>
 
             <div className="card-brutal p-6 mb-8">
               <Skeleton className="h-5 w-32 mb-4" />
-              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-48 w-full" />
             </div>
 
             <div className="card-brutal p-6">
@@ -192,23 +191,21 @@ export default function DashboardPage() {
     );
   }
 
-  const totalDonations = donations.reduce((sum, d) => sum + d.amount, 0);
-  const profileUrl = `${window.location.origin}/${creator.username}`;
+  // Split lifetime volume by asset so the two headline cards reflect what was
+  // actually received in each currency, rather than summing across them.
+  const xlmVolume = donations
+    .filter((d) => d.currency === 'XLM')
+    .reduce((sum, d) => sum + d.amount, 0);
+  const usdcVolume = donations
+    .filter((d) => d.currency === 'USDC')
+    .reduce((sum, d) => sum + d.amount, 0);
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-background py-10 px-4">
-        <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
-            <h1 className="text-4xl font-extrabold text-ink tracking-tight">Dashboard</h1>
-            <Link
-              href="/settings"
-              className="btn-brutal btn-brutal-white text-center"
-            >
-              Settings
-            </Link>
-          </div>
+      <div className="min-h-screen bg-background">
+        <AppNav />
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+          <h1 className="text-4xl font-extrabold text-ink tracking-tight mb-8">Dashboard</h1>
 
           {error && (
             <div className="card-brutal bg-brand-pink p-4 mb-6 text-ink font-bold">
@@ -216,57 +213,31 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Stats Grid */}
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
+          {/* Volume by asset */}
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
             <div className="card-brutal bg-brand-cyan p-6">
-              <p className="text-ink text-sm font-bold uppercase tracking-wide">Total Donations</p>
-              <p className="text-4xl font-extrabold text-ink mt-2">{donations.length}</p>
+              <p className="text-ink text-sm font-bold uppercase tracking-wide">XLM Volume</p>
+              <p className="text-4xl font-extrabold text-ink mt-2 tabular-nums">
+                {xlmVolume.toFixed(2)} <span className="text-2xl">XLM</span>
+              </p>
+              {formatUsd(xlmVolume, 'XLM', prices) && (
+                <p className="text-sm font-bold text-ink/70 mt-1">{formatUsd(xlmVolume, 'XLM', prices)}</p>
+              )}
             </div>
             <div className="card-brutal bg-brand-lime p-6">
-              <p className="text-ink text-sm font-bold uppercase tracking-wide">Total Earned</p>
-              <p className="text-4xl font-extrabold text-ink mt-2">{totalDonations.toFixed(2)} XLM</p>
-              {formatUsd(totalDonations, 'XLM', prices) && (
-                <p className="text-sm font-bold text-ink/70 mt-1">{formatUsd(totalDonations, 'XLM', prices)}</p>
-              )}
-            </div>
-            <div className="card-brutal bg-brand-yellow p-6">
-              <p className="text-ink text-sm font-bold uppercase tracking-wide">Average Donation</p>
-              <p className="text-4xl font-extrabold text-ink mt-2">
-                {donations.length > 0 ? (totalDonations / donations.length).toFixed(2) : 0} XLM
+              <p className="text-ink text-sm font-bold uppercase tracking-wide">USDC Volume</p>
+              <p className="text-4xl font-extrabold text-ink mt-2 tabular-nums">
+                {usdcVolume.toFixed(2)} <span className="text-2xl">USDC</span>
               </p>
-              {donations.length > 0 && formatUsd(totalDonations / donations.length, 'XLM', prices) && (
-                <p className="text-sm font-bold text-ink/70 mt-1">
-                  {formatUsd(totalDonations / donations.length, 'XLM', prices)}
-                </p>
+              {formatUsd(usdcVolume, 'USDC', prices) && (
+                <p className="text-sm font-bold text-ink/70 mt-1">{formatUsd(usdcVolume, 'USDC', prices)}</p>
               )}
             </div>
           </div>
 
-          {/* Tips over time chart */}
+          {/* Earnings over time chart */}
           <div className="mb-8">
             <TipChart donations={donations} />
-          </div>
-
-          {/* Profile Link */}
-          <div className="card-brutal p-6 mb-8">
-            <h2 className="text-lg font-extrabold text-ink mb-4">Your Profile</h2>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <input
-                type="text"
-                value={profileUrl}
-                readOnly
-                className="input-brutal flex-1 min-w-0 bg-accent-bg text-muted"
-              />
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(profileUrl);
-                  toast.success('Profile URL copied to clipboard!');
-                }}
-                className="btn-brutal btn-brutal-primary"
-              >
-                Copy
-              </button>
-            </div>
           </div>
 
           {/* Recent Donations */}

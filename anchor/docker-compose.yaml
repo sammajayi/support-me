@@ -1,0 +1,99 @@
+# Local Stellar Anchor Platform for SupportMe — TESTNET, DEV ONLY.
+#
+# Adapted from the official stellar/anchor-platform `quick-run/` compose
+# (v4.6.0). This is throwaway developer infrastructure: a self-hosted anchor to
+# develop the SEP-24 flow against when the public testanchor.stellar.org is
+# flaky. It is NOT part of the SupportMe product and never ships — on mainnet
+# the app points at a real regulated anchor via NEXT_PUBLIC_ANCHOR_* env vars.
+#
+# Do not run `docker compose up` directly — run ./setup.sh, which generates and
+# funds the testnet keypairs and renders the config templates first.
+services:
+  # SEP server + platform API + event processor + stellar observer.
+  platform:
+    platform: linux/amd64
+    image: stellar/anchor-platform:4.6.0
+    command: --sep-server --platform-server --event-processor --stellar-observer
+    volumes:
+      - ./config:/config
+    env_file:
+      - ./dev.env
+    environment:
+      SECRET_SEP10_SIGNING_SEED: ${HOST_SEP10_SECRET_KEY}
+    ports:
+      - "8080:8080" # SEP server (Stellar Protocol endpoints)
+      - "8085:8085" # Platform API server
+    depends_on:
+      - db
+      - kafka
+      - reference-server
+      - sep24-reference-ui
+
+  # Reference anchor backend (KYC form + JSON-RPC status updates + settlement).
+  reference-server:
+    platform: linux/amd64
+    image: stellar/anchor-platform:4.6.0
+    command: "--kotlin-reference-server"
+    volumes:
+      - ./config:/config
+    env_file:
+      - ./dev.env
+    environment:
+      KT_REFERENCE_SERVER_CONFIG: /config/reference-config.yaml
+      SECRET_SEP10_SIGNING_SEED: ${HOST_SEP10_SECRET_KEY}
+    ports:
+      - "8091:8091"
+    depends_on:
+      - reference-db
+
+  # SEP-24 interactive flow reference UI (the KYC/amount form the popup opens).
+  sep24-reference-ui:
+    platform: linux/amd64
+    image: stellar/sep24-reference-ui
+    # Host 3001 (container stays 3000): host 3000 is taken by the SupportMe
+    # Next.js dev server, so both can run at once.
+    ports:
+      - "3001:3000"
+
+  # Kafka event bus (plaintext KRaft mode, no SASL/SSL — dev only).
+  kafka:
+    platform: linux
+    image: confluentinc/cp-kafka:7.4.3
+    ports:
+      - "29092:29092"
+      - "29096:29096"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29096'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      CLUSTER_ID: 'ciWo7IWazngRchmPES6q5A=='
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      KAFKA_BROKER_ID: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:29096"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+
+  # Platform database.
+  db:
+    image: postgres:15.2-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+
+  # Reference server database (separate port so both can run locally).
+  reference-db:
+    image: postgres:15.2-alpine
+    ports:
+      - "5433:5433"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    command: -p 5433

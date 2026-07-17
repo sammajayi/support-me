@@ -82,13 +82,6 @@ export function TipJar({ widthClass = 'w-[260px] sm:w-[320px]' }: { widthClass?:
           viewBox="0 0 200 300"
           className={`${widthClass} h-auto overflow-visible drop-shadow-[6px_6px_0_rgba(10,10,10,1)]`}
         >
-          {/* Falling coin: animates from the hand down into the jar mouth */}
-          {dropping && (
-            <g className="tipjar-drop">
-              <Coin x={100} y={0} r={0} size={18} />
-            </g>
-          )}
-
           {/* Hand dropping a coin (simple mitten shape holding a coin). The
               outer group carries the release animation; the inner group scales
               the whole hand up without fighting that transform. */}
@@ -130,6 +123,15 @@ export function TipJar({ widthClass = 'w-[260px] sm:w-[320px]' }: { widthClass?:
               <Coin key={i} x={s.x} y={s.y} r={s.r} size={16} />
             ))}
           </g>
+
+          {/* Falling coin: drops from the hand down through the jar mouth and
+              into the pile. Rendered last so it stays visible in front of the
+              (semi-transparent) glass and the "TIPS" band as it falls. */}
+          {dropping && (
+            <g className="tipjar-drop">
+              <Coin x={100} y={0} r={0} size={18} />
+            </g>
+          )}
         </svg>
       </div>
     </div>

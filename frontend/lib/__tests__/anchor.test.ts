@@ -1,6 +1,11 @@
+// @vitest-environment node
+// (Runs in Node, not jsdom: ensureTrustline builds and signs a real Stellar
+// transaction, and jsdom's cross-realm Uint8Array trips up stellar-base. The
+// other cases here — TOML resolution and fetch polling — are env-agnostic.)
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as StellarSdk from '@stellar/stellar-sdk';
-import { loadAnchorConfig, pollWithdraw, AnchorError } from '@/lib/anchor';
+import { loadAnchorConfig, pollWithdraw, ensureTrustline, AnchorError } from '@/lib/anchor';
+import { signTransaction } from '@/lib/wallet';
 
 // The anchor module signs with the wallet; those paths aren't exercised here.
 // We test the pure/network parts: TOML resolution + validation, and the
@@ -47,6 +52,27 @@ describe('loadAnchorConfig', () => {
     } as never);
 
     await expect(loadAnchorConfig('anchor.example', 'SRT')).rejects.toThrowError(/transfer server/i);
+  });
+
+  it('allows cleartext http only for a localhost anchor', async () => {
+    const spy = vi
+      .spyOn(StellarSdk.StellarToml.Resolver, 'resolve')
+      .mockResolvedValue({ ...GOOD_TOML, CURRENCIES: [{ code: 'USDC', issuer: 'GISSUER' }] } as never);
+
+    await loadAnchorConfig('localhost:8080', 'USDC');
+
+    expect(spy).toHaveBeenCalledWith('localhost:8080', { allowHttp: true });
+  });
+
+  it('does not allow cleartext http for a remote anchor', async () => {
+    const spy = vi
+      .spyOn(StellarSdk.StellarToml.Resolver, 'resolve')
+      .mockResolvedValue(GOOD_TOML as never);
+
+    await loadAnchorConfig('anchor.example', 'SRT');
+
+    // Second arg must be undefined (HTTPS-only) for a non-localhost domain.
+    expect(spy).toHaveBeenCalledWith('anchor.example', undefined);
   });
 });
 
@@ -108,5 +134,55 @@ describe('pollWithdraw', () => {
         intervalMs: 0,
       })
     ).rejects.toThrow('payment failed');
+  });
+});
+
+describe('ensureTrustline', () => {
+  const keypair = StellarSdk.Keypair.random();
+  const account = keypair.publicKey();
+  const config = { assetCode: 'SRT', assetIssuer: StellarSdk.Keypair.random().publicKey() } as never;
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('builds a changeTrust tx, signs it via the wallet, and submits to Horizon', async () => {
+    // Minimal Horizon account for the TransactionBuilder to consume.
+    const source = new StellarSdk.Account(account, '123');
+    const loadAccount = vi
+      .spyOn(StellarSdk.Horizon.Server.prototype, 'loadAccount')
+      .mockResolvedValue(source as never);
+    const submit = vi
+      .spyOn(StellarSdk.Horizon.Server.prototype, 'submitTransaction')
+      .mockResolvedValue({ hash: 'trust-hash' } as never);
+
+    // Wallet mock signs the built XDR locally and returns the SDK's shape.
+    vi.mocked(signTransaction).mockImplementation(async (xdr: string) => {
+      const tx = StellarSdk.TransactionBuilder.fromXDR(xdr, StellarSdk.Networks.TESTNET);
+      tx.sign(keypair);
+      return { signedTxXdr: tx.toEnvelope().toXDR('base64') };
+    });
+
+    const hash = await ensureTrustline(config, account);
+
+    expect(hash).toBe('trust-hash');
+    expect(loadAccount).toHaveBeenCalledWith(account);
+
+    // The submitted transaction carries exactly one changeTrust op for SRT.
+    const submitted = submit.mock.calls[0][0] as StellarSdk.Transaction;
+    expect(submitted.operations).toHaveLength(1);
+    expect(submitted.operations[0].type).toBe('changeTrust');
+    expect((submitted.operations[0] as StellarSdk.Operation.ChangeTrust).line).toMatchObject({
+      code: 'SRT',
+    });
+  });
+
+  it('wraps a wallet rejection in an AnchorError at the trustline-sign step', async () => {
+    vi.spyOn(StellarSdk.Horizon.Server.prototype, 'loadAccount')
+      .mockResolvedValue(new StellarSdk.Account(account, '123') as never);
+    vi.mocked(signTransaction).mockRejectedValue(new Error('user declined'));
+
+    await expect(ensureTrustline(config, account)).rejects.toMatchObject({
+      name: 'AnchorError',
+      step: 'trustline-sign',
+    });
   });
 });
