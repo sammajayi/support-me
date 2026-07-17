@@ -4,21 +4,81 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
+import { TipJar } from '@/components/TipJar'
+import { WalletMenu } from '@/components/WalletMenu'
+import { HugeiconsIcon } from '@hugeicons/react'
+import {
+  FlashIcon,
+  BankIcon,
+  GlobalIcon,
+  UserCircleIcon,
+  Analytics01Icon,
+  CodeIcon,
+} from '@hugeicons/core-free-icons'
+
+const FEATURES = [
+  {
+    icon: FlashIcon,
+    title: 'Instant Settlement',
+    body: 'Built on Stellar. Tips settle in about five seconds with sub-cent fees — fast enough that even the smallest tip makes sense.',
+    color: 'bg-brand-yellow',
+  },
+  {
+    icon: BankIcon,
+    title: 'Cash Out to Your Bank',
+    body: 'Turn tips into local currency and withdraw straight to your bank through a Stellar anchor. No exchange, no detour.',
+    color: 'bg-brand-lime',
+  },
+  {
+    icon: GlobalIcon,
+    title: 'Multi-Asset',
+    body: 'Take tips in XLM or USDC. Supporters send what they hold, you keep track of every asset in one dashboard.',
+    color: 'bg-brand-cyan',
+  },
+  {
+    icon: UserCircleIcon,
+    title: 'Creator Profiles',
+    body: 'A public, shareable page with your donation history. Share one link and start receiving tips today.',
+    color: 'bg-brand-pink',
+  },
+  {
+    icon: Analytics01Icon,
+    title: 'Live Dashboard',
+    body: 'Track earnings, supporters, and messages in real time. Every tip lands on your dashboard the moment it settles.',
+    color: 'bg-brand-orange',
+  },
+  {
+    icon: CodeIcon,
+    title: 'Zero Platform Fees',
+    body: '100% of every tip goes to the creator. No cut, no hidden charges — just the network fee, which is a fraction of a cent.',
+    color: 'bg-brand-lilac',
+  },
+]
+
+const STEPS = [
+  {
+    title: 'Connect Your Wallet & Create Profile',
+    body: 'Connect your Stellar wallet and sign a message to prove ownership, then choose a unique username for your public profile.',
+  },
+  {
+    title: 'Set Your Payout Wallet',
+    body: 'In settings, connect the wallet (Freighter, xBull, Albedo, Rabet, or Lobstr) you want to receive tips on. Self-custodial the whole way.',
+  },
+  {
+    title: 'Share Your Link',
+    body: 'Get your unique profile link (supportme.app/yourname) and share it with your community, fans, or on social media.',
+  },
+  {
+    title: 'Get Tipped, Then Cash Out',
+    body: 'Supporters send XLM or USDC tips. Track them live on your dashboard, then withdraw to your bank whenever you want.',
+  },
+]
 
 export default function Home() {
-  const [scrolled, setScrolled] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState('')
-  const { user, logout, loginWithWallet } = useAuth()
+  const { user, loginWithWallet } = useAuth()
   const router = useRouter()
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 50)
-    }
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
 
   const handleConnectWallet = async () => {
     setConnecting(true)
@@ -34,36 +94,30 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white via-blue-50 to-white">
+    <div className="min-h-screen bg-background">
       {/* Navigation */}
-      <nav className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'bg-white shadow-md' : 'bg-transparent'}`}>
+      <nav className="sticky top-0 w-full z-50 bg-background border-b-4 border-ink">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center gap-4">
-          <div className="text-xl sm:text-2xl font-bold text-indigo-600 shrink-0">SupportMe</div>
+          <div className="text-xl sm:text-2xl font-extrabold text-ink shrink-0 tracking-tight">
+            SupportMe
+          </div>
           <div className="hidden sm:flex items-center gap-6">
-            <a href="#features" className="text-gray-600 hover:text-indigo-600 transition">Features</a>
-            <a href="#how-it-works" className="text-gray-600 hover:text-indigo-600 transition">How it Works</a>
+            <a href="#features" className="font-bold text-ink hover:text-primary transition">Features</a>
+            <a href="#how-it-works" className="font-bold text-ink hover:text-primary transition">How it Works</a>
             {user && (
-              <Link href="/dashboard" className="text-gray-600 hover:text-indigo-600 transition">
+              <Link href="/dashboard" className="font-bold text-ink hover:text-primary transition">
                 Dashboard
               </Link>
             )}
           </div>
           <div className="flex items-center gap-4 shrink-0">
             {user ? (
-              <button
-                onClick={() => {
-                  logout()
-                  window.location.href = '/'
-                }}
-                className="text-gray-600 hover:text-indigo-600 transition text-sm sm:text-base"
-              >
-                Sign Out
-              </button>
+              <WalletMenu />
             ) : (
               <button
                 onClick={handleConnectWallet}
                 disabled={connecting}
-                className="bg-indigo-600 text-white px-3 py-2 sm:px-6 text-sm sm:text-base rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition"
+                className="btn-brutal btn-brutal-primary text-sm sm:text-base"
               >
                 {connecting ? 'Connecting...' : 'Connect Wallet'}
               </button>
@@ -73,219 +127,175 @@ export default function Home() {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="mb-6 inline-block">
-            <div className="text-6xl mb-4">☕</div>
-          </div>
-          <h1 className="text-5xl sm:text-6xl font-bold text-gray-900 mb-6">
-            Support Your Favorite Creators
-          </h1>
-          <p className="text-xl sm:text-2xl text-gray-600 mb-8 leading-relaxed">
-            A decentralized tipping platform built on Stellar blockchain. Send XLM donations directly to creators you love—no intermediaries, no fees.
-          </p>
-          {error && (
-            <div className="max-w-md mx-auto bg-red-50 border border-red-200 rounded-lg p-3 mb-6 text-sm text-red-700">
-              {error}
+      <section className="pt-20 pb-20 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto grid lg:grid-cols-2 gap-8 items-center">
+          {/* Left: copy + CTAs */}
+          <div className="text-center lg:text-left">
+            <div className="mb-6 inline-block card-brutal bg-brand-yellow px-4 py-2 -rotate-1">
+              <span className="font-extrabold uppercase tracking-wide text-ink text-sm">
+                Tips in crypto · Cash out to your bank
+              </span>
             </div>
-          )}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            {user ? (
-              <Link href="/dashboard" className="bg-indigo-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-indigo-700 transition text-lg">
-                Go to Dashboard
-              </Link>
-            ) : (
-              <>
-                <button
-                  onClick={handleConnectWallet}
-                  disabled={connecting}
-                  className="bg-indigo-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-60 transition text-lg"
-                >
-                  {connecting ? 'Connecting...' : 'Become a Creator'}
-                </button>
-                <a href="#features" className="border-2 border-indigo-600 text-indigo-600 px-8 py-4 rounded-lg font-semibold hover:bg-indigo-50 transition text-lg">
-                  Learn More
-                </a>
-              </>
+            <h1 className="text-5xl sm:text-7xl font-extrabold text-ink mb-6 tracking-tight leading-[1.05]">
+              Get Tipped.<br />Get Paid.
+            </h1>
+            <p className="text-xl sm:text-2xl text-ink/80 mb-8 leading-relaxed font-medium">
+              A tipping platform built on Stellar. Supporters send XLM or USDC, you cash out to your bank. No middlemen, no platform fees.
+            </p>
+            {error && (
+              <div className="card-brutal bg-brand-pink p-3 mb-6 text-sm font-bold text-ink">
+                {error}
+              </div>
             )}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+              {user ? (
+                <Link href="/dashboard" className="btn-brutal btn-brutal-primary text-lg">
+                  Go to Dashboard
+                </Link>
+              ) : (
+                <>
+                  <button
+                    onClick={handleConnectWallet}
+                    disabled={connecting}
+                    className="btn-brutal btn-brutal-primary text-lg"
+                  >
+                    {connecting ? 'Connecting...' : 'Become a Creator'}
+                  </button>
+                  <a href="#features" className="btn-brutal btn-brutal-white text-lg">
+                    Learn More
+                  </a>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Right: self-animating tip jar */}
+          <div className="flex justify-center lg:justify-end">
+            <TipJar />
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-white/50">
+      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 border-t-4 border-ink bg-card">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-center text-gray-900 mb-16">Why Choose SupportMe?</h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Feature 1 */}
-            <div className="p-8 rounded-xl border border-gray-200 hover:shadow-lg transition">
-              <div className="text-4xl mb-4">⚡</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Instant Transactions</h3>
-              <p className="text-gray-600">
-                Built on Stellar blockchain. Donations arrive in seconds, not days. Fast, reliable, and secure.
-              </p>
-            </div>
-
-            {/* Feature 2 */}
-            <div className="p-8 rounded-xl border border-gray-200 hover:shadow-lg transition">
-              <div className="text-4xl mb-4">🔒</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Zero Fees</h3>
-              <p className="text-gray-600">
-                100% of your donation goes to creators. No platform fees, no hidden charges. Pure support.
-              </p>
-            </div>
-
-            {/* Feature 3 */}
-            <div className="p-8 rounded-xl border border-gray-200 hover:shadow-lg transition">
-              <div className="text-4xl mb-4">🌍</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Global & Open</h3>
-              <p className="text-gray-600">
-                Support creators anywhere in the world. Decentralized, transparent, and open source.
-              </p>
-            </div>
-
-            {/* Feature 4 */}
-            <div className="p-8 rounded-xl border border-gray-200 hover:shadow-lg transition">
-              <div className="text-4xl mb-4">👤</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Creator Profiles</h3>
-              <p className="text-gray-600">
-                Public profiles with donation history. Share your support link and start receiving tips today.
-              </p>
-            </div>
-
-            {/* Feature 5 */}
-            <div className="p-8 rounded-xl border border-gray-200 hover:shadow-lg transition">
-              <div className="text-4xl mb-4">📊</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Analytics Dashboard</h3>
-              <p className="text-gray-600">
-                Track donations, supporters, and insights. Know who&apos;s supporting your work and how much.
-              </p>
-            </div>
-
-            {/* Feature 6 */}
-            <div className="p-8 rounded-xl border border-gray-200 hover:shadow-lg transition">
-              <div className="text-4xl mb-4">🔗</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Easy Integration</h3>
-              <p className="text-gray-600">
-                Embed donation buttons on your website. Simple, elegant, and takes minutes to set up.
-              </p>
-            </div>
+          <h2 className="text-4xl sm:text-5xl font-extrabold text-center text-ink mb-16 tracking-tight">
+            Why Choose SupportMe?
+          </h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            {FEATURES.map((feature) => (
+              <div key={feature.title} className="card-brutal bg-background p-6 flex flex-col gap-3">
+                <div className={`card-brutal ${feature.color} w-14 h-14 flex items-center justify-center shrink-0`}>
+                  <HugeiconsIcon icon={feature.icon} size={28} strokeWidth={2} className="text-ink" />
+                </div>
+                <h3 className="text-xl font-extrabold text-ink">{feature.title}</h3>
+                <p className="text-ink/70 font-medium">{feature.body}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* How It Works */}
-      <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8">
+      <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8 border-t-4 border-ink">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-4xl font-bold text-center text-gray-900 mb-16">How It Works</h2>
-          <div className="space-y-8">
-            <div className="flex gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-lg">1</div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Connect Your Wallet & Create Profile</h3>
-                <p className="text-gray-600">Connect your Stellar wallet and sign a message to prove ownership, then choose a unique username for your public profile.</p>
+          <h2 className="text-4xl sm:text-5xl font-extrabold text-center text-ink mb-16 tracking-tight">
+            How It Works
+          </h2>
+          <div className="space-y-6">
+            {STEPS.map((step, i) => (
+              <div key={step.title} className="card-brutal bg-background p-6 flex gap-5 items-start">
+                <div className="flex-shrink-0 w-12 h-12 bg-primary text-white border-2 border-ink flex items-center justify-center font-extrabold text-lg">
+                  {i + 1}
+                </div>
+                <div>
+                  <h3 className="text-2xl font-extrabold text-ink mb-2">{step.title}</h3>
+                  <p className="text-ink/70 font-medium">{step.body}</p>
+                </div>
               </div>
-            </div>
-            <div className="flex gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-lg">2</div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Set Your Payout Wallet</h3>
-                <p className="text-gray-600">In your settings, connect the wallet (Freighter, xBull, Albedo, Rabet, or Lobstr) you want to receive tips on. Secure, simple, and self-custodial.</p>
-              </div>
-            </div>
-            <div className="flex gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-lg">3</div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Share Your Link</h3>
-                <p className="text-gray-600">Get your unique profile link (supportme.app/yourname) and share it with your community, fans, or on social media.</p>
-              </div>
-            </div>
-            <div className="flex gap-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-lg">4</div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Receive Donations</h3>
-                <p className="text-gray-600">Supporters visit your profile and send XLM tips. Donations are instantly recorded on the blockchain and visible in your dashboard.</p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Stats Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-white/50">
+      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t-4 border-ink bg-card">
         <div className="max-w-4xl mx-auto">
-          <div className="grid md:grid-cols-3 gap-8 text-center">
-            <div>
-              <div className="text-4xl font-bold text-indigo-600 mb-2">1000+</div>
-              <div className="text-gray-600">Active Creators</div>
+          <div className="grid md:grid-cols-3 gap-6 text-center">
+            <div className="card-brutal bg-brand-lime p-8">
+              <div className="text-4xl font-extrabold text-ink mb-2">~5s</div>
+              <div className="text-ink font-bold">Settlement Time</div>
             </div>
-            <div>
-              <div className="text-4xl font-bold text-indigo-600 mb-2">$50K+</div>
-              <div className="text-gray-600">Donations Sent</div>
+            <div className="card-brutal bg-brand-cyan p-8">
+              <div className="text-4xl font-extrabold text-ink mb-2">&lt;$0.01</div>
+              <div className="text-ink font-bold">Network Fee</div>
             </div>
-            <div>
-              <div className="text-4xl font-bold text-indigo-600 mb-2">5000+</div>
-              <div className="text-gray-600">Supporters</div>
+            <div className="card-brutal bg-brand-yellow p-8">
+              <div className="text-4xl font-extrabold text-ink mb-2">0%</div>
+              <div className="text-ink font-bold">Platform Fee</div>
             </div>
           </div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-2xl mx-auto text-center bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl p-12 text-white">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-6">Ready to Support Your Favorite Creator?</h2>
-          <p className="text-lg mb-8 opacity-90">Join thousands of supporters making a real impact with Stellar-powered donations.</p>
+      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t-4 border-ink">
+        <div className="max-w-2xl mx-auto text-center card-brutal bg-primary p-12">
+          <h2 className="text-3xl sm:text-4xl font-extrabold mb-6 text-white">
+            Ready to Get Tipped?
+          </h2>
+          <p className="text-lg mb-8 text-white/90 font-medium">
+            Set up your creator page in minutes. Take tips in crypto, cash out in your currency.
+          </p>
           {user ? (
-            <Link href="/dashboard" className="bg-white text-indigo-600 px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 transition text-lg inline-block">
-              Go to Dashboard →
+            <Link href="/dashboard" className="btn-brutal btn-brutal-white text-lg inline-block">
+              Go to Dashboard
             </Link>
           ) : (
             <button
               onClick={handleConnectWallet}
               disabled={connecting}
-              className="bg-white text-indigo-600 px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 disabled:opacity-60 transition text-lg inline-block"
+              className="btn-brutal btn-brutal-white text-lg inline-block"
             >
-              {connecting ? 'Connecting...' : 'Get Started Now →'}
+              {connecting ? 'Connecting...' : 'Get Started Now'}
             </button>
           )}
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-12 px-4 sm:px-6 lg:px-8 bg-gray-900 text-gray-400">
+      <footer className="py-12 px-4 sm:px-6 lg:px-8 bg-ink text-background border-t-4 border-ink">
         <div className="max-w-6xl mx-auto">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
-              <div className="text-2xl font-bold text-white mb-4">SupportMe</div>
-              <p className="text-sm">Empowering creators through decentralized tipping on Stellar.</p>
+              <div className="text-2xl font-extrabold text-background mb-4">SupportMe</div>
+              <p className="text-sm text-background/70 font-medium">Tips in crypto, cash out to your bank. Built on Stellar.</p>
             </div>
             <div>
-              <h4 className="text-white font-bold mb-4">Product</h4>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white transition">Features</a></li>
-                <li><a href="#" className="hover:text-white transition">Pricing</a></li>
-                <li><a href="#" className="hover:text-white transition">Security</a></li>
+              <h4 className="text-background font-extrabold mb-4">Product</h4>
+              <ul className="space-y-2 text-sm text-background/70 font-medium">
+                <li><a href="#features" className="hover:text-brand-yellow transition">Features</a></li>
+                <li><a href="#how-it-works" className="hover:text-brand-yellow transition">How it Works</a></li>
               </ul>
             </div>
             <div>
-              <h4 className="text-white font-bold mb-4">Community</h4>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white transition">Documentation</a></li>
-                <li><a href="#" className="hover:text-white transition">GitHub</a></li>
-                <li><a href="#" className="hover:text-white transition">Discord</a></li>
+              <h4 className="text-background font-extrabold mb-4">Community</h4>
+              <ul className="space-y-2 text-sm text-background/70 font-medium">
+                <li><a href="#" className="hover:text-brand-yellow transition">Documentation</a></li>
+                <li><a href="#" className="hover:text-brand-yellow transition">GitHub</a></li>
+                <li><a href="#" className="hover:text-brand-yellow transition">Discord</a></li>
               </ul>
             </div>
             <div>
-              <h4 className="text-white font-bold mb-4">Legal</h4>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white transition">Privacy</a></li>
-                <li><a href="#" className="hover:text-white transition">Terms</a></li>
-                <li><a href="#" className="hover:text-white transition">Contact</a></li>
+              <h4 className="text-background font-extrabold mb-4">Legal</h4>
+              <ul className="space-y-2 text-sm text-background/70 font-medium">
+                <li><a href="#" className="hover:text-brand-yellow transition">Privacy</a></li>
+                <li><a href="#" className="hover:text-brand-yellow transition">Terms</a></li>
+                <li><a href="#" className="hover:text-brand-yellow transition">Contact</a></li>
               </ul>
             </div>
           </div>
-          <div className="border-t border-gray-800 pt-8 text-center text-sm">
+          <div className="border-t-2 border-background/20 pt-8 text-center text-sm text-background/70 font-medium">
             <p>&copy; 2026 SupportMe. Built on Stellar. Open source and community-driven.</p>
           </div>
         </div>

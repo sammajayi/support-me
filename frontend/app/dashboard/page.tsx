@@ -8,7 +8,14 @@ import { PartyIcon } from '@hugeicons/core-free-icons';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { Skeleton } from '@/components/Skeleton';
+import { TipChart } from '@/components/TipChart';
+import { usePrices } from '@/lib/usePrices';
+import { formatUsd } from '@/lib/prices';
 import { API_URL } from '@/lib/api';
+
+const STELLAR_NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK || 'testnet';
+const explorerTxUrl = (hash: string) =>
+  `https://stellar.expert/explorer/${STELLAR_NETWORK}/tx/${hash}`;
 
 interface Creator {
   id: number;
@@ -34,6 +41,7 @@ export default function DashboardPage() {
   const [donations, setDonations] = useState<Donation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const prices = usePrices();
 
   useEffect(() => {
     const fetchCreator = async () => {
@@ -133,7 +141,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 py-10 px-4">
+        <div className="min-h-screen bg-background py-10 px-4">
           <div className="max-w-6xl mx-auto">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
               <Skeleton className="h-9 w-40" />
@@ -142,19 +150,19 @@ export default function DashboardPage() {
 
             <div className="grid md:grid-cols-3 gap-6 mb-8">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="bg-white rounded-lg shadow p-6 border border-gray-200">
+                <div key={i} className="card-brutal p-6">
                   <Skeleton className="h-4 w-28 mb-3" />
                   <Skeleton className="h-8 w-16" />
                 </div>
               ))}
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6 border border-gray-200 mb-8">
+            <div className="card-brutal p-6 mb-8">
               <Skeleton className="h-5 w-32 mb-4" />
               <Skeleton className="h-10 w-full" />
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
+            <div className="card-brutal p-6">
               <Skeleton className="h-5 w-40 mb-4" />
               <div className="space-y-3">
                 {[0, 1, 2, 3].map((i) => (
@@ -171,11 +179,11 @@ export default function DashboardPage() {
   if (!creator) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center px-4">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Complete Your Profile</h1>
-            <p className="text-gray-600 mb-6">You need to create a username first</p>
-            <Link href="/auth/username" className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">
+        <div className="min-h-screen bg-background flex items-center justify-center px-4">
+          <div className="card-brutal bg-card p-10 text-center max-w-md">
+            <h1 className="text-2xl font-extrabold text-ink mb-4">Complete Your Profile</h1>
+            <p className="text-muted font-medium mb-6">You need to create a username first</p>
+            <Link href="/auth/username" className="btn-brutal btn-brutal-primary">
               Create Username
             </Link>
           </div>
@@ -189,59 +197,72 @@ export default function DashboardPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 py-10 px-4">
+      <div className="min-h-screen bg-background py-10 px-4">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <h1 className="text-4xl font-extrabold text-ink tracking-tight">Dashboard</h1>
             <Link
               href="/settings"
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-center"
+              className="btn-brutal btn-brutal-white text-center"
             >
               Settings
             </Link>
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-red-700">
+            <div className="card-brutal bg-brand-pink p-4 mb-6 text-ink font-bold">
               {error}
             </div>
           )}
 
           {/* Stats Grid */}
           <div className="grid md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-              <p className="text-gray-600 text-sm font-medium">Total Donations</p>
-              <p className="text-3xl font-bold text-indigo-600 mt-2">{donations.length}</p>
+            <div className="card-brutal bg-brand-cyan p-6">
+              <p className="text-ink text-sm font-bold uppercase tracking-wide">Total Donations</p>
+              <p className="text-4xl font-extrabold text-ink mt-2">{donations.length}</p>
             </div>
-            <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-              <p className="text-gray-600 text-sm font-medium">Total Earned</p>
-              <p className="text-3xl font-bold text-indigo-600 mt-2">{totalDonations.toFixed(2)} XLM</p>
+            <div className="card-brutal bg-brand-lime p-6">
+              <p className="text-ink text-sm font-bold uppercase tracking-wide">Total Earned</p>
+              <p className="text-4xl font-extrabold text-ink mt-2">{totalDonations.toFixed(2)} XLM</p>
+              {formatUsd(totalDonations, 'XLM', prices) && (
+                <p className="text-sm font-bold text-ink/70 mt-1">{formatUsd(totalDonations, 'XLM', prices)}</p>
+              )}
             </div>
-            <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-              <p className="text-gray-600 text-sm font-medium">Average Donation</p>
-              <p className="text-3xl font-bold text-indigo-600 mt-2">
+            <div className="card-brutal bg-brand-yellow p-6">
+              <p className="text-ink text-sm font-bold uppercase tracking-wide">Average Donation</p>
+              <p className="text-4xl font-extrabold text-ink mt-2">
                 {donations.length > 0 ? (totalDonations / donations.length).toFixed(2) : 0} XLM
               </p>
+              {donations.length > 0 && formatUsd(totalDonations / donations.length, 'XLM', prices) && (
+                <p className="text-sm font-bold text-ink/70 mt-1">
+                  {formatUsd(totalDonations / donations.length, 'XLM', prices)}
+                </p>
+              )}
             </div>
           </div>
 
+          {/* Tips over time chart */}
+          <div className="mb-8">
+            <TipChart donations={donations} />
+          </div>
+
           {/* Profile Link */}
-          <div className="bg-white rounded-lg shadow p-6 border border-gray-200 mb-8">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Your Profile</h2>
+          <div className="card-brutal p-6 mb-8">
+            <h2 className="text-lg font-extrabold text-ink mb-4">Your Profile</h2>
             <div className="flex flex-col sm:flex-row gap-4">
               <input
                 type="text"
                 value={profileUrl}
                 readOnly
-                className="flex-1 min-w-0 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                className="input-brutal flex-1 min-w-0 bg-accent-bg text-muted"
               />
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(profileUrl);
                   toast.success('Profile URL copied to clipboard!');
                 }}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
+                className="btn-brutal btn-brutal-primary"
               >
                 Copy
               </button>
@@ -249,41 +270,59 @@ export default function DashboardPage() {
           </div>
 
           {/* Recent Donations */}
-          <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Recent Donations</h2>
+          <div className="card-brutal p-6">
+            <h2 className="text-lg font-extrabold text-ink mb-4">Recent Donations</h2>
             {donations.length === 0 ? (
-              <p className="text-gray-600">No donations yet. Share your profile link to get started!</p>
+              <p className="text-muted font-medium">No donations yet. Share your profile link to get started!</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Sender</th>
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Amount</th>
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Message</th>
-                      <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {donations.map((donation) => (
-                      <tr key={donation.id} className="border-b border-gray-200 hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {donation.senderAddress.slice(0, 10)}...
-                        </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-indigo-600">
-                          {donation.amount} {donation.currency}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {donation.message || '-'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">
-                          {new Date(donation.createdAt).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ul className="divide-y divide-ink/10">
+                {donations.map((donation) => {
+                  const hasHash = Boolean(donation.transactionHash);
+                  const usd = formatUsd(donation.amount, donation.currency, prices);
+                  const row = (
+                    <div className="flex items-center gap-3 py-2.5">
+                      <span className="text-sm font-extrabold text-primary whitespace-nowrap tabular-nums">
+                        {donation.amount} {donation.currency}
+                      </span>
+                      {usd && (
+                        <span className="text-xs text-muted whitespace-nowrap tabular-nums">{usd}</span>
+                      )}
+                      <span className="text-xs text-muted font-mono whitespace-nowrap">
+                        {donation.senderAddress.slice(0, 6)}…{donation.senderAddress.slice(-4)}
+                      </span>
+                      {donation.message && (
+                        <span className="text-sm text-ink font-medium truncate flex-1 min-w-0">
+                          {donation.message}
+                        </span>
+                      )}
+                      <span className="text-xs text-muted whitespace-nowrap ml-auto pl-2">
+                        {new Date(donation.createdAt).toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                  );
+
+                  return (
+                    <li key={donation.id}>
+                      {hasHash ? (
+                        <a
+                          href={explorerTxUrl(donation.transactionHash)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="View transaction on Stellar Expert"
+                          className="block -mx-2 px-2 rounded hover:bg-accent-bg focus:bg-accent-bg focus:outline-none transition-colors"
+                        >
+                          {row}
+                        </a>
+                      ) : (
+                        <div className="-mx-2 px-2">{row}</div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </div>
         </div>

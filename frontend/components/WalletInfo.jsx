@@ -4,19 +4,19 @@ export default function WalletInfo({ address, balance }) {
     : '—'
 
   return (
-    <div className="bg-card border border-border rounded-2xl px-4 py-3 flex flex-col gap-2 animate-fade-in">
+    <div className="card-brutal px-4 py-3 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-black">
+        <span className="text-[11px] font-bold uppercase tracking-widest text-ink">
           Address
         </span>
         <span className="font-mono text-[13px] text-muted">{short}</span>
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-black">
+        <span className="text-[11px] font-bold uppercase tracking-widest text-ink">
           Balance
         </span>
-        <span className="bg-accent-bg text-primary rounded-full px-3 py-0.5 text-[13px] font-semibold font-mono whitespace-nowrap">
+        <span className="bg-brand-lime text-ink border-2 border-ink rounded-full px-3 py-0.5 text-[13px] font-bold font-mono whitespace-nowrap">
           {balance !== null ? `${balance} XLM` : 'Loading…'}
         </span>
       </div>

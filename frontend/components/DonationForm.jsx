@@ -16,18 +16,18 @@ export default function DonationForm({ onSend, loading }) {
 
       {/* Divider */}
       <div className="flex items-center gap-3">
-        <div className="flex-1 h-px bg-border" />
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-muted">
+        <div className="flex-1 h-0.5 bg-ink" />
+        <span className="text-[11px] font-extrabold uppercase tracking-widest text-ink">
           Send a donation
         </span>
-        <div className="flex-1 h-px bg-border" />
+        <div className="flex-1 h-0.5 bg-ink" />
       </div>
 
       {/* Amount */}
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="amount"
-          className="text-[12px] font-semibold text-muted"
+          className="text-[12px] font-bold text-ink"
         >
           Amount
         </label>
@@ -40,18 +40,9 @@ export default function DonationForm({ onSend, loading }) {
             value={amount}
             onChange={e => setAmount(e.target.value)}
             placeholder="0.00"
-            className="
-              w-full pr-14 pl-4 py-3.5
-              border border-border rounded-xl
-              font-sans text-[15px] font-medium
-              bg-none outline-none
-              text-black
-              placeholder:text-muted
-              focus:border-primary focus:ring-2 focus:ring-primary/10
-              transition
-            "
+            className="input-brutal pr-14 text-[15px] font-medium"
           />
-          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[13px] font-bold font-mono text-primary pointer-events-none">
+          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[13px] font-extrabold font-mono text-primary pointer-events-none">
             XLM
           </span>
         </div>
@@ -61,10 +52,10 @@ export default function DonationForm({ onSend, loading }) {
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="memo"
-          className="text-[12px] font-semibold text-muted"
+          className="text-[12px] font-bold text-ink"
         >
           Message{' '}
-          <span className="font-normal text-muted">(optional)</span>
+          <span className="font-medium text-muted">(optional)</span>
         </label>
         <input
           id="memo"
@@ -73,15 +64,7 @@ export default function DonationForm({ onSend, loading }) {
           value={memo}
           onChange={e => setMemo(e.target.value)}
           placeholder="Add a kind note…"
-          className="
-            w-full px-4 py-3.5
-            border border-border rounded-xl
-            font-sans text-[15px] text-black
-            bg-none outline-none
-            placeholder:text-muted
-            focus:border-primary focus:ring-2 focus:ring-primary/10
-            transition
-          "
+          className="input-brutal text-[15px]"
         />
       </div>
 
@@ -89,17 +72,7 @@ export default function DonationForm({ onSend, loading }) {
       <button
         onClick={handleSend}
         disabled={!valid || loading}
-        className="
-          w-full py-4 rounded-xl
-          flex items-center justify-center gap-2
-          cursor-pointer
-          font-bold text-[15px] text-white
-          bg-primary hover:bg-primary-dim
-          shadow-[0_2px_12px_rgba(99,102,241,0.28)]
-          hover:shadow-[0_4px_20px_rgba(99,102,241,0.36)]
-          disabled:bg-foreground disabled:text-muted disabled:shadow-none disabled:cursor-not-allowed
-          transition-all active:scale-[.98]
-        "
+        className="btn-brutal btn-brutal-primary w-full py-4 text-[15px]"
       >
         {loading ? (
           <>
@@ -107,7 +80,7 @@ export default function DonationForm({ onSend, loading }) {
             <span>Sending…</span>
           </>
         ) : (
-          <span>💜 Send Donation</span>
+          <span>Send Donation</span>
         )}
       </button>
 

@@ -1,34 +1,52 @@
 @import "tailwindcss";
 
+/*
+ * SupportMe — neobrutalism design system (v3)
+ * Hard black borders, flat saturated fills, chunky offset shadows, no gradients.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #1F2937;
+  --background: #fdfcf7; /* warm paper */
+  --foreground: #0a0a0a; /* near-black ink */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-primary: #6366F1;
-  --color-primary-dim: #5B5FC7;
-  --color-card: #F8F9FB;
-  --color-border: #E5E7EB;
-  --color-muted: #6B7280;
-  --color-accent-bg: #EEF2FF;
+
+  /* Ink drives every border and shadow in the system. */
+  --color-ink: #0a0a0a;
+
+  /* Primary action color. */
+  --color-primary: #7c3aed;      /* violet */
+  --color-primary-dim: #6d28d9;  /* pressed/hover violet */
+
+  /* Flat, saturated brand fills used across cards and badges. */
+  --color-brand-yellow: #ffd84d;
+  --color-brand-lime: #b4f461;
+  --color-brand-cyan: #6fd3ff;
+  --color-brand-pink: #ff9db1;
+  --color-brand-orange: #ff7a5c;
+  --color-brand-lilac: #c4b5fd;
+
+  --color-card: #ffffff;
+  --color-border: #0a0a0a;       /* hard black, not soft gray */
+  --color-muted: #57534e;
+  --color-accent-bg: #ede9fe;    /* soft violet wash for panels */
+
+  /* Chunky offset shadows — the signature neobrutalism drop. */
+  --shadow-brutal-sm: 2px 2px 0 0 #0a0a0a;
+  --shadow-brutal: 4px 4px 0 0 #0a0a0a;
+  --shadow-brutal-lg: 6px 6px 0 0 #0a0a0a;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
 input[type="number"]::-webkit-inner-spin-button,
@@ -39,5 +57,87 @@ input[type="number"]::-webkit-outer-spin-button {
 
 input[type="number"] {
   -moz-appearance: textfield;
-  
+}
+
+/*
+ * Reusable neobrutalism primitives. Components compose these instead of
+ * repeating the border/shadow/translate recipe everywhere.
+ */
+@layer components {
+  .card-brutal {
+    @apply bg-card border-2 border-ink rounded-xl;
+    box-shadow: var(--shadow-brutal);
+  }
+
+  .btn-brutal {
+    @apply inline-flex items-center justify-center gap-2 font-bold
+           border-2 border-ink rounded-xl px-6 py-3 cursor-pointer
+           transition-all duration-100;
+    box-shadow: var(--shadow-brutal);
+  }
+  .btn-brutal:hover:not(:disabled) {
+    transform: translate(-1px, -1px);
+    box-shadow: var(--shadow-brutal-lg);
+  }
+  .btn-brutal:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: var(--shadow-brutal-sm);
+  }
+  .btn-brutal:disabled {
+    @apply opacity-60 cursor-not-allowed;
+    transform: none;
+    box-shadow: var(--shadow-brutal-sm);
+  }
+
+  /* Button color variants. */
+  .btn-brutal-primary {
+    @apply bg-primary text-white;
+  }
+  .btn-brutal-white {
+    @apply bg-white text-ink;
+  }
+  .btn-brutal-lime {
+    @apply bg-brand-lime text-ink;
+  }
+
+  .input-brutal {
+    @apply w-full px-4 py-3 bg-white text-black
+           border-2 border-ink rounded-xl outline-none
+           placeholder:text-muted transition-all;
+  }
+  .input-brutal:focus {
+    box-shadow: var(--shadow-brutal-sm);
+  }
+}
+
+/* Tip jar animations (used by <TipJar>). Kept in global CSS rather than
+   styled-jsx so they compile the same in Next and in the Vitest/jsdom test
+   environment. */
+.tipjar-drop {
+  animation: tipjar-fall 0.7s cubic-bezier(0.5, 0, 0.75, 0) forwards;
+}
+@keyframes tipjar-fall {
+  0% {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(190px);
+    opacity: 1;
+  }
+}
+.tipjar-hand-release {
+  animation: tipjar-tip 0.7s ease-in-out;
+}
+@keyframes tipjar-tip {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  30% {
+    transform: rotate(-14deg) translateX(-4px);
+  }
 }

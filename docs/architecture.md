@@ -28,6 +28,14 @@ together.
   - Connects wallets (Freighter, xBull, Albedo, Rabet, Lobstr) via Stellar
     Wallets Kit, and calls the `donation` contract directly
     (`lib/contract.js`: simulate → sign → submit → poll for confirmation).
+  - Supports multiple donation assets (XLM + USDC) via a client-side asset
+    registry (`lib/assets.js`) that resolves each asset's Stellar Asset
+    Contract id for the `donation` contract's generic `token` parameter — no
+    contract change required.
+  - Integrates a Stellar **anchor** for fiat cash-out (`lib/anchor.js`): the
+    full SEP-24 interactive withdraw flow (SEP-10 auth → `/info` → interactive
+    popup → status polling → on-chain payment to the anchor), wired into
+    `/settings`. Defaults to the SDF reference anchor on testnet.
   - Subscribes to the backend's SSE stream (`EventSource`) on the dashboard
     and public profile pages so new donations appear live without polling.
   - Tested with Vitest + React Testing Library (components, `AuthContext`,
@@ -106,6 +114,26 @@ flowchart TD
   - Validate all mutating requests with Zod schemas and return consistent
     error shapes via centralized error-handling middleware.
 
+## Anchor / Fiat Flow (SEP-24 withdraw)
+
+```mermaid
+flowchart TD
+  A[Creator on /settings] -->|click Cash Out| B[lib/anchor.js]
+  B -->|SEP-1: read stellar.toml| C[Anchor home domain]
+  B -->|SEP-10: sign challenge| D[Wallet]
+  B -->|POST withdraw/interactive| E[Anchor transfer server]
+  E -->|hosted URL| F[Interactive popup: KYC + bank details]
+  B -->|poll GET /transaction| E
+  B -->|sign + submit payment to anchor| G[Stellar Testnet]
+  E -->|payout| H[Creator's bank account]
+```
+
+On testnet this points at the SDF reference anchor (`testanchor.stellar.org`,
+asset `SRT`) — no signup, cost, or partnership. The same code targets a real
+NGN anchor on mainnet by changing `NEXT_PUBLIC_ANCHOR_*` env vars. Fan-side
+fiat on-ramp (SEP-24 deposit) and path-payment auto-settlement are documented
+in [PRD(v3)](../PRD(v3).md) but intentionally out of scope for this iteration.
+
 ## Contribution Focus Areas
 
 - Add pagination and filtering for dashboards and donation history
@@ -113,5 +141,6 @@ flowchart TD
   local Stellar network (e.g. `stellar-cli`'s local sandbox)
 - Add a Railway/production deploy step to the CI workflow, gated on the
   existing test jobs
-- Support additional Stellar assets (USDC, etc.) beyond native XLM
+- Add SEP-24 **deposit** (fan fiat on-ramp) and path-payment settlement so a
+  tip in one asset lands in the creator's preferred payout asset
 - Add embeddable donation widgets for creators to use on other sites

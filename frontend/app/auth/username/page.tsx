@@ -65,27 +65,27 @@ export default function CreateUsernamePage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center px-4 py-10">
+      <div className="min-h-screen bg-background flex items-center justify-center px-4 py-10">
         <div className="w-full max-w-md">
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
+          <div className="card-brutal p-8">
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-gray-900">Create Your Profile</h1>
-              <p className="text-gray-600 text-sm mt-2">Choose a unique username</p>
+              <h1 className="text-3xl font-extrabold text-ink tracking-tight">Create Your Profile</h1>
+              <p className="text-muted text-sm mt-2 font-medium">Choose a unique username</p>
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-sm text-red-700">
+              <div className="card-brutal bg-brand-pink p-4 mb-6 text-sm text-ink font-bold">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-bold text-ink mb-1">
                   Username
                 </label>
                 <div className="flex items-center">
-                  <span className="text-gray-500 px-4 py-2.5 bg-gray-50 border border-r-0 border-gray-300 rounded-l-lg text-sm">
+                  <span className="text-muted px-4 py-3 bg-accent-bg border-2 border-r-0 border-ink rounded-l-xl text-sm font-bold">
                     supportme.app/
                   </span>
                   <input
@@ -93,16 +93,16 @@ export default function CreateUsernamePage() {
                     value={username}
                     onChange={(e) => setUsername(e.target.value.toLowerCase())}
                     placeholder="yourname"
-                    className="flex-1 px-4 py-2.5 border border-l-0 border-gray-300 rounded-r-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-black"
+                    className="input-brutal flex-1 rounded-l-none border-l-0"
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-muted mt-2 font-medium">
                   Letters, numbers, underscores, and hyphens only (3+ characters)
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-bold text-ink mb-1">
                   Display Name (Optional)
                 </label>
                 <input
@@ -110,20 +110,20 @@ export default function CreateUsernamePage() {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Your Name"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-black"
+                  className="input-brutal"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition mt-6"
+                className="btn-brutal btn-brutal-primary w-full mt-6"
               >
                 {loading ? 'Creating profile...' : 'Create Profile'}
               </button>
             </form>
 
-            <p className="text-center text-gray-500 text-xs mt-6">
+            <p className="text-center text-muted text-xs mt-6 font-medium">
               You can change this later in your settings
             </p>
           </div>

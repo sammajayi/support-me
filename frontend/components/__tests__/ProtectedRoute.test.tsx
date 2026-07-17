@@ -29,7 +29,7 @@ describe('ProtectedRoute', () => {
       </ProtectedRoute>
     );
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: /loading/i })).toBeInTheDocument();
     expect(screen.queryByText('Secret content')).not.toBeInTheDocument();
   });
 

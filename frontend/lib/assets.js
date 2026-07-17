@@ -1,0 +1,62 @@
+import * as StellarSdk from '@stellar/stellar-sdk';
+
+const NETWORK_PASSPHRASE = StellarSdk.Networks.TESTNET;
+
+// USDC is only available when its issuer is configured via env. On testnet
+// this is typically the SDF-issued test USDC
+// (GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA).
+const USDC_ISSUER = process.env.NEXT_PUBLIC_USDC_ISSUER;
+
+/**
+ * Supported donation assets. Each entry knows how to resolve its own Stellar
+ * Asset Contract (SAC) id — the address the `donate` contract's generic
+ * `token` parameter expects. XLM is always available; USDC only appears when
+ * an issuer is configured, so the UI can hide it cleanly on deployments that
+ * haven't set it up yet.
+ */
+export const ASSETS = {
+  XLM: {
+    code: 'XLM',
+    label: 'XLM',
+    asset: () => StellarSdk.Asset.native(),
+    // Native asset type on Horizon balances is 'native', not 'credit_*'.
+    balanceMatcher: (b) => b.asset_type === 'native',
+  },
+  ...(USDC_ISSUER
+    ? {
+        USDC: {
+          code: 'USDC',
+          label: 'USDC',
+          issuer: USDC_ISSUER,
+          asset: () => new StellarSdk.Asset('USDC', USDC_ISSUER),
+          balanceMatcher: (b) =>
+            b.asset_code === 'USDC' && b.asset_issuer === USDC_ISSUER,
+        },
+      }
+    : {}),
+};
+
+/** Asset codes available to the donation UI, XLM first. */
+export function availableAssetCodes() {
+  return Object.keys(ASSETS);
+}
+
+/** Look up an asset entry by code, defaulting to XLM. */
+export function getAsset(code) {
+  return ASSETS[code] || ASSETS.XLM;
+}
+
+/**
+ * Resolve the SAC contract id for an asset code. Throws a clear, user-facing
+ * error if an asset was requested that isn't configured (e.g. USDC without an
+ * issuer env), mirroring the guard style already used in `lib/contract.js`.
+ */
+export function sacContractId(code) {
+  const entry = ASSETS[code];
+  if (!entry) {
+    throw new Error(
+      `${code} is not configured for donations on this deployment.`
+    );
+  }
+  return entry.asset().contractId(NETWORK_PASSPHRASE);
+}

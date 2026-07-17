@@ -49,6 +49,14 @@ only reachable through the `donation` contract's cross-contract calls.
 
 ![Connect Wallet modal showing Freighter, xBull, Albedo, Rabet, and LOBSTR options](frontend/public/multi-wallet-integration.png)
 
+## What's New (v4) — Fiat Cash-Out, Multi-Asset & Rebrand
+
+See [`PRD(v3).md`](PRD(v3).md) and [`docs/v3-plan.md`](docs/v3-plan.md) for the full rationale.
+
+- **Cash Out to Your Bank (SEP-24 withdraw)**: Creators can withdraw earnings to fiat through a Stellar anchor, right from `/settings` — no CEX detour. The full interactive flow (SEP-10 sign-in → hosted KYC/bank form → on-chain transfer to the anchor → live status) lives in [`frontend/lib/anchor.js`](frontend/lib/anchor.js). Defaults to the SDF reference anchor (`testanchor.stellar.org`, asset `SRT`) on testnet — no signup, cost, or partnership required; point `NEXT_PUBLIC_ANCHOR_*` at a real NGN anchor to go live.
+- **Multi-Asset Tipping**: Supporters can tip in **USDC** alongside XLM. The `donate` contract already takes a generic token address, so this is resolved entirely client-side ([`frontend/lib/assets.js`](frontend/lib/assets.js)) — set `NEXT_PUBLIC_USDC_ISSUER` to enable the asset selector; without it the UI cleanly falls back to XLM-only.
+- **Neobrutalism Rebrand**: New design system — hard black borders, flat saturated fills, chunky offset shadows, no gradients — driven by reusable primitives (`card-brutal`, `btn-brutal`, `input-brutal`) in [`frontend/app/globals.css`](frontend/app/globals.css).
+
 ## What's New (v3)
 
 - **Real-Time Updates**: A backend Soroban event listener polls the `donation` contract for on-chain events and streams them to connected clients over Server-Sent Events (`GET /api/events`) — the dashboard and creator profile pages update live as donations settle, no polling or refresh needed

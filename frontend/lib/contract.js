@@ -1,5 +1,6 @@
 import * as StellarSdk from '@stellar/stellar-sdk';
 import { signTransaction as signWithWallet } from './wallet';
+import { sacContractId } from './assets';
 
 const RPC_URL =
   process.env.NEXT_PUBLIC_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
@@ -27,13 +28,14 @@ export class DonationError extends Error {
  * @param {object} params
  * @param {string} params.donorAddress
  * @param {string} params.creatorAddress
- * @param {string|number} params.amountXlm
+ * @param {string|number} params.amount amount in whole units of the asset
+ * @param {string} [params.assetCode] 'XLM' (default) or 'USDC'
  * @param {string} params.memo
  * @param {(status: string) => void} [params.onStatus] called with
  *   'building' | 'simulating' | 'awaiting-signature' | 'submitting' | 'pending' | 'success'
  * @returns {Promise<{ hash: string }>}
  */
-export async function sendDonation({ donorAddress, creatorAddress, amountXlm, memo, onStatus }) {
+export async function sendDonation({ donorAddress, creatorAddress, amount, assetCode = 'XLM', memo, onStatus }) {
   if (!CONTRACT_ID) {
     throw new DonationError(
       'simulation',
@@ -54,8 +56,13 @@ export async function sendDonation({ donorAddress, creatorAddress, amountXlm, me
     );
   }
 
-  const tokenId = StellarSdk.Asset.native().contractId(NETWORK_PASSPHRASE);
-  const amountStroops = BigInt(Math.round(parseFloat(amountXlm) * 1e7));
+  let tokenId;
+  try {
+    tokenId = sacContractId(assetCode);
+  } catch (err) {
+    throw new DonationError('simulation', err.message, err);
+  }
+  const amountStroops = BigInt(Math.round(parseFloat(amount) * 1e7));
   const contract = new StellarSdk.Contract(CONTRACT_ID);
 
   let tx;

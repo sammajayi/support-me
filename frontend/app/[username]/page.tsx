@@ -8,6 +8,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { PartyIcon } from '@hugeicons/core-free-icons';
 import { connectWallet } from '@/lib/wallet';
 import { sendDonation, DonationError } from '@/lib/contract';
+import { availableAssetCodes, getAsset } from '@/lib/assets';
 import { API_URL } from '@/lib/api';
 import { Skeleton } from '@/components/Skeleton';
 
@@ -54,10 +55,12 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
 
   const [donationAmount, setDonationAmount] = useState('5');
   const [donationMessage, setDonationMessage] = useState('');
+  const [assetCode, setAssetCode] = useState('XLM');
   const [sending, setSending] = useState(false);
   const [txStatus, setTxStatus] = useState<string | null>(null);
 
   const presets = ['1', '5', '10', '20'];
+  const assetCodes = availableAssetCodes();
 
   useEffect(() => {
     const fetchCreator = async () => {
@@ -132,15 +135,24 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
     };
   }, [creator?.walletAddress, userAddress]);
 
+  // Read the connected wallet's balance for whichever asset is selected.
+  // Falls back to '0.0000' when the wallet holds no trustline/balance for it.
+  const loadAssetBalance = async (address: string, code: string) => {
+    try {
+      const account = await server.loadAccount(address);
+      const match = account.balances.find(getAsset(code).balanceMatcher);
+      return parseFloat((match as { balance?: string })?.balance || '0').toFixed(4);
+    } catch {
+      return null;
+    }
+  };
+
   const handleConnectWallet = async () => {
     setConnecting(true);
     try {
       const address = await connectWallet();
       setUserAddress(address);
-
-      const account = await server.loadAccount(address);
-      const xlm = account.balances.find((b) => b.asset_type === 'native');
-      setBalance(parseFloat(xlm?.balance || '0').toFixed(4));
+      setBalance(await loadAssetBalance(address, assetCode));
       toast.success('Wallet connected!');
     } catch (err) {
       toast.error('Could not connect wallet', {
@@ -165,12 +177,14 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
       const { hash } = await sendDonation({
         donorAddress: userAddress,
         creatorAddress: creator.walletAddress,
-        amountXlm: donationAmount,
+        amount: donationAmount,
+        assetCode,
         memo: donationMessage,
         onStatus: setTxStatus,
       });
 
-      // Record donation in database
+      // Record donation in database, tagging it with the asset that was sent
+      // so the dashboard and profile can show XLM vs USDC correctly.
       await fetch(`${API_URL}/api/donations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -178,17 +192,14 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
           creatorUsername: creator.username,
           senderAddress: userAddress,
           amount: parseFloat(donationAmount),
+          currency: assetCode,
           message: donationMessage,
           transactionHash: hash,
         }),
       });
 
-      // Refresh balance
-      try {
-        const account = await server.loadAccount(userAddress);
-        const xlm = account.balances.find((b) => b.asset_type === 'native');
-        setBalance(parseFloat(xlm?.balance || '0').toFixed(4));
-      } catch { }
+      // Refresh balance for the asset just sent
+      setBalance(await loadAssetBalance(userAddress, assetCode));
 
       toast.success('Donation sent successfully!', {
         icon: <HugeiconsIcon icon={PartyIcon} size={18} strokeWidth={1.5} />,
@@ -228,12 +239,12 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 py-10 px-4">
+      <div className="min-h-screen bg-background py-10 px-4">
         <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-lg shadow border border-gray-200 p-8 mb-8 text-center">
+          <div className="card-brutal p-8 mb-8 text-center">
             <Skeleton className="h-9 w-64 mx-auto mb-3" />
             <Skeleton className="h-5 w-32 mx-auto mb-6" />
-            <div className="grid md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-200">
+            <div className="grid md:grid-cols-3 gap-4 mt-6 pt-6 border-t-2 border-ink">
               {[0, 1, 2].map((i) => (
                 <div key={i}>
                   <Skeleton className="h-4 w-24 mx-auto mb-2" />
@@ -245,13 +256,13 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
 
           <div className="grid md:grid-cols-3 gap-8">
             <div className="md:col-span-1">
-              <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="card-brutal p-6">
                 <Skeleton className="h-5 w-40 mb-4" />
                 <Skeleton className="h-12 w-full" />
               </div>
             </div>
             <div className="md:col-span-2">
-              <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="card-brutal p-6">
                 <Skeleton className="h-5 w-40 mb-4" />
                 <div className="space-y-3">
                   {[0, 1, 2].map((i) => (
@@ -268,10 +279,10 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
 
   if (error || !creator) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center px-4">
-        <div className="text-center bg-white rounded-lg p-8 max-w-md shadow">
-          <p className="text-red-600 font-semibold mb-4">{error || 'Creator not found'}</p>
-          <Link href="/" className="text-indigo-600 hover:underline">
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="text-center card-brutal p-8 max-w-md">
+          <p className="text-ink font-bold mb-4">{error || 'Creator not found'}</p>
+          <Link href="/" className="text-primary hover:underline font-bold">
             Back to home
           </Link>
         </div>
@@ -284,32 +295,32 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
     .slice(0, 5);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 py-10 px-4">
+    <div className="min-h-screen bg-background py-10 px-4">
       <div className="max-w-4xl mx-auto">
         {/* Creator Header */}
-        <div className="bg-white rounded-lg shadow border border-gray-200 p-8 mb-8 text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+        <div className="card-brutal p-8 mb-8 text-center">
+          <h1 className="text-4xl font-extrabold text-ink mb-2 tracking-tight">
             {creator.displayName || creator.username}
           </h1>
-          <p className="text-gray-600 text-xl mb-4">@{creator.username}</p>
-          {creator.bio && <p className="text-gray-600 mb-6">{creator.bio}</p>}
+          <p className="text-muted text-xl mb-4 font-bold">@{creator.username}</p>
+          {creator.bio && <p className="text-ink/70 mb-6 font-medium">{creator.bio}</p>}
 
-          <div className="grid md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-200">
+          <div className="grid md:grid-cols-3 gap-4 mt-6 pt-6 border-t-2 border-ink">
             <div>
-              <p className="text-gray-500 text-sm">Total Donations</p>
-              <p className="text-2xl font-bold text-indigo-600">
+              <p className="text-muted text-sm font-bold">Total Donations</p>
+              <p className="text-2xl font-extrabold text-primary">
                 {donations.length}
               </p>
             </div>
             <div>
-              <p className="text-gray-500 text-sm">Total Received</p>
-              <p className="text-2xl font-bold text-indigo-600">
+              <p className="text-muted text-sm font-bold">Total Received</p>
+              <p className="text-2xl font-extrabold text-primary">
                 {donations.reduce((sum, d) => sum + d.amount, 0).toFixed(2)} XLM
               </p>
             </div>
             <div>
-              <p className="text-gray-500 text-sm">Average Donation</p>
-              <p className="text-2xl font-bold text-indigo-600">
+              <p className="text-muted text-sm font-bold">Average Donation</p>
+              <p className="text-2xl font-extrabold text-primary">
                 {donations.length > 0
                   ? (donations.reduce((sum, d) => sum + d.amount, 0) / donations.length).toFixed(2)
                   : 0} XLM
@@ -321,28 +332,56 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
         <div className="grid md:grid-cols-3 gap-8">
           {/* Donation Card */}
           <div className="md:col-span-1">
-            <div className="bg-white rounded-lg shadow border border-gray-200 p-6 md:sticky md:top-8">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Support {creator.displayName || creator.username}</h2>
+            <div className="card-brutal p-6 md:sticky md:top-8">
+              <h2 className="text-lg font-extrabold text-ink mb-4">Support {creator.displayName || creator.username}</h2>
 
               {!userAddress ? (
                 <button
                   onClick={handleConnectWallet}
                   disabled={connecting}
-                  className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 font-semibold mb-4 transition"
+                  className="btn-brutal btn-brutal-primary w-full mb-4"
                 >
                   {connecting ? 'Connecting...' : 'Connect Wallet'}
                 </button>
               ) : (
                 <>
-                  <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
-                    <p className="text-gray-600">Wallet: {userAddress.slice(0, 8)}...</p>
-                    <p className="text-indigo-600 font-semibold mt-1">{balance} XLM</p>
+                  <div className="card-brutal bg-brand-lime p-3 mb-4 text-sm">
+                    <p className="text-ink font-medium">Wallet: {userAddress.slice(0, 8)}...</p>
+                    <p className="text-ink font-extrabold mt-1">
+                      {balance ?? '0.0000'} {assetCode}
+                    </p>
                   </div>
 
                   <div className="space-y-4">
+                    {assetCodes.length > 1 && (
+                      <div>
+                        <label className="block text-sm font-bold text-ink mb-2">
+                          Asset
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {assetCodes.map((code) => (
+                            <button
+                              key={code}
+                              onClick={async () => {
+                                setAssetCode(code);
+                                if (userAddress) {
+                                  setBalance(await loadAssetBalance(userAddress, code));
+                                }
+                              }}
+                              className={`btn-brutal text-sm px-0 py-2 ${
+                                assetCode === code ? 'btn-brutal-primary' : 'btn-brutal-white'
+                              }`}
+                            >
+                              {code}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Amount (XLM)
+                      <label className="block text-sm font-bold text-ink mb-2">
+                        Amount ({assetCode})
                       </label>
                       <input
                         type="number"
@@ -350,7 +389,7 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
                         step="0.1"
                         value={donationAmount}
                         onChange={(e) => setDonationAmount(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-black"
+                        className="input-brutal"
                       />
                     </div>
 
@@ -359,10 +398,10 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
                         <button
                           key={preset}
                           onClick={() => setDonationAmount(preset)}
-                          className={`py-2 rounded-lg font-semibold text-sm transition ${
+                          className={`btn-brutal text-sm px-0 py-2 ${
                             donationAmount === preset
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                              ? 'btn-brutal-primary'
+                              : 'btn-brutal-white'
                           }`}
                         >
                           {preset}
@@ -371,7 +410,7 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-bold text-ink mb-2">
                         Message (Optional)
                       </label>
                       <textarea
@@ -379,10 +418,10 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
                         onChange={(e) => setDonationMessage(e.target.value)}
                         maxLength={28}
                         placeholder="Thanks for your work!"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-black"
+                        className="input-brutal text-sm"
                         rows={3}
                       />
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-muted mt-1 font-medium">
                         {donationMessage.length}/28
                       </p>
                     </div>
@@ -390,13 +429,13 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
                     <button
                       onClick={handleSendDonation}
                       disabled={sending || !creator.walletAddress}
-                      className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60 font-semibold transition"
+                      className="btn-brutal btn-brutal-lime w-full"
                     >
                       {sending ? 'Sending...' : 'Send Donation'}
                     </button>
 
                     {txStatus && STATUS_LABELS[txStatus] && (
-                      <p className="text-sm text-gray-600 text-center animate-pulse">
+                      <p className="text-sm text-ink text-center animate-pulse font-bold">
                         {STATUS_LABELS[txStatus]}
                       </p>
                     )}
@@ -408,26 +447,26 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
 
           {/* Recent Donors */}
           <div className="md:col-span-2">
-            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Recent Supporters</h2>
+            <div className="card-brutal p-6">
+              <h2 className="text-lg font-extrabold text-ink mb-4">Recent Supporters</h2>
               {recentDonations.length === 0 ? (
-                <p className="text-gray-600">Be the first to support this creator!</p>
+                <p className="text-muted font-medium">Be the first to support this creator!</p>
               ) : (
                 <div className="space-y-3">
                   {recentDonations.map((donation) => (
-                    <div key={donation.id} className="flex items-start justify-between p-4 bg-gray-50 rounded-lg">
+                    <div key={donation.id} className="flex items-start justify-between p-4 bg-background border-2 border-ink rounded-xl">
                       <div className="flex-1">
-                        <p className="font-semibold text-gray-900">
+                        <p className="font-bold text-ink">
                           {donation.senderAddress.slice(0, 8)}...
                         </p>
                         {donation.message && (
-                          <p className="text-sm text-gray-600 mt-1">"{donation.message}"</p>
+                          <p className="text-sm text-muted mt-1 font-medium">"{donation.message}"</p>
                         )}
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-muted mt-1 font-medium">
                           {new Date(donation.createdAt).toLocaleDateString()}
                         </p>
                       </div>
-                      <p className="font-bold text-indigo-600">
+                      <p className="font-extrabold text-primary">
                         {donation.amount} {donation.currency}
                       </p>
                     </div>

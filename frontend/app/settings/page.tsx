@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { Skeleton } from '@/components/Skeleton';
 import { connectWallet } from '@/lib/wallet';
+import { runWithdraw, runDeposit, anchorConfig, AnchorError } from '@/lib/anchor';
 import { API_URL } from '@/lib/api';
 
 interface Creator {
@@ -20,6 +21,35 @@ interface Creator {
   avatarUrl: string;
 }
 
+// Human-readable copy for each phase/status the withdraw flow emits, so the
+// panel can narrate progress rather than dumping raw SEP-24 status strings.
+const WITHDRAW_STATUS_LABELS: Record<string, string> = {
+  config: "Reading the anchor's details…",
+  auth: 'Signing in to the anchor…',
+  info: 'Checking withdrawal availability…',
+  interactive: 'Opening the anchor…',
+  pending: 'Waiting for the anchor…',
+  incomplete: 'Complete the form in the anchor window…',
+  pending_user_transfer_start: 'Sending your funds to the anchor…',
+  'sending-payment': 'Confirm the payment in your wallet…',
+  pending_anchor: 'Anchor is processing your payout…',
+  pending_external: 'Payout is on its way to your bank…',
+  completed: 'Withdrawal complete.',
+};
+
+const DEPOSIT_STATUS_LABELS: Record<string, string> = {
+  config: "Reading the anchor's details…",
+  auth: 'Signing in to the anchor…',
+  info: 'Checking deposit availability…',
+  interactive: 'Opening the anchor…',
+  pending: 'Waiting for the anchor…',
+  incomplete: 'Complete the form in the anchor window…',
+  pending_user_transfer_start: 'Waiting for your funds to reach the anchor…',
+  pending_anchor: 'Anchor is crediting your wallet…',
+  pending_external: 'Anchor is processing your deposit…',
+  completed: 'Deposit complete — funds are in your wallet.',
+};
+
 export default function SettingsPage() {
   const { user, token, logout } = useAuth();
   const [creator, setCreator] = useState<Creator | null>(null);
@@ -29,6 +59,10 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState('');
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawStatus, setWithdrawStatus] = useState<string | null>(null);
+  const [depositing, setDepositing] = useState(false);
+  const [depositStatus, setDepositStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchCreator = async () => {
@@ -108,14 +142,82 @@ export default function SettingsPage() {
     }
   };
 
+  // Kick off the full SEP-24 withdraw against the configured anchor. The popup
+  // must open synchronously inside this click handler, so runWithdraw opens it
+  // as soon as the anchor returns the interactive URL — don't await anything
+  // blocking before that point on the UI side.
+  const handleWithdraw = async () => {
+    if (!walletAddress) {
+      toast.error('Connect your payout wallet first');
+      return;
+    }
+    setWithdrawing(true);
+    setWithdrawStatus('config');
+    try {
+      const result = await runWithdraw(walletAddress, {
+        onStatus: (phase: string) => setWithdrawStatus(phase),
+      });
+      if (!result) {
+        toast('Withdrawal cancelled');
+      } else if (result.status === 'completed') {
+        toast.success('Withdrawal complete — funds are on their way to your bank.');
+      } else {
+        toast(`Withdrawal ended with status: ${result.status}`);
+      }
+    } catch (err) {
+      if (err instanceof AnchorError) {
+        toast.error('Withdrawal failed', { description: err.message });
+      } else {
+        toast.error('Withdrawal failed', { description: (err as Error).message });
+      }
+    } finally {
+      setWithdrawing(false);
+      setWithdrawStatus(null);
+    }
+  };
+
+  // Kick off the full SEP-24 deposit. Same popup-timing rule as withdraw: the
+  // popup opens synchronously once the anchor returns the interactive URL. On
+  // the testnet sandbox this is how you mint test SRT into the wallet (fake KYC
+  // in the popup), so there's a funded balance to later cash out.
+  const handleDeposit = async () => {
+    if (!walletAddress) {
+      toast.error('Connect your payout wallet first');
+      return;
+    }
+    setDepositing(true);
+    setDepositStatus('config');
+    try {
+      const result = await runDeposit(walletAddress, {
+        onStatus: (phase: string) => setDepositStatus(phase),
+      });
+      if (!result) {
+        toast('Deposit cancelled');
+      } else if (result.status === 'completed') {
+        toast.success(`Deposit complete — ${anchorConfig.assetCode} credited to your wallet.`);
+      } else {
+        toast(`Deposit ended with status: ${result.status}`);
+      }
+    } catch (err) {
+      if (err instanceof AnchorError) {
+        toast.error('Deposit failed', { description: err.message });
+      } else {
+        toast.error('Deposit failed', { description: (err as Error).message });
+      }
+    } finally {
+      setDepositing(false);
+      setDepositStatus(null);
+    }
+  };
+
   if (loading) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 py-10 px-4">
+        <div className="min-h-screen bg-background py-10 px-4">
           <div className="max-w-2xl mx-auto">
             <Skeleton className="h-9 w-40 mb-8" />
 
-            <div className="bg-white rounded-lg shadow border border-gray-200 p-8 space-y-6">
+            <div className="card-brutal p-8 space-y-6">
               <div>
                 <Skeleton className="h-5 w-40 mb-4" />
                 <div className="space-y-4">
@@ -130,13 +232,13 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="border-t border-gray-200 pt-6">
+              <div className="border-t-2 border-ink pt-6">
                 <Skeleton className="h-5 w-44 mb-4" />
                 <Skeleton className="h-4 w-32 mb-2" />
                 <Skeleton className="h-10 w-full" />
               </div>
 
-              <div className="flex gap-4 pt-6 border-t border-gray-200">
+              <div className="flex gap-4 pt-6 border-t-2 border-ink">
                 <Skeleton className="h-10 w-full" />
               </div>
             </div>
@@ -148,35 +250,35 @@ export default function SettingsPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 py-10 px-4">
+      <div className="min-h-screen bg-background py-10 px-4">
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900 mb-8">Settings</h1>
+          <h1 className="text-3xl font-extrabold text-ink mb-8 tracking-tight">Settings</h1>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-red-700">
+            <div className="card-brutal bg-brand-pink p-4 mb-6 text-ink font-bold">
               {error}
             </div>
           )}
 
           {creator ? (
-            <div className="bg-white rounded-lg shadow border border-gray-200 p-8 space-y-6">
+            <div className="card-brutal p-8 space-y-6">
               <div>
-                <h2 className="text-lg font-bold text-gray-900 mb-4">Profile Information</h2>
+                <h2 className="text-lg font-extrabold text-ink mb-4">Profile Information</h2>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-bold text-ink mb-2">
                       Display Name
                     </label>
                     <input
                       type="text"
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition text-black"
+                      className="input-brutal"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-bold text-ink mb-2">
                       Bio
                     </label>
                     <textarea
@@ -184,17 +286,17 @@ export default function SettingsPage() {
                       onChange={(e) => setBio(e.target.value)}
                       placeholder="Tell people about yourself..."
                       rows={4}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition text-black"
+                      className="input-brutal"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="border-t border-gray-200 pt-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-4">Wallet Connection</h2>
+              <div className="border-t-2 border-ink pt-6">
+                <h2 className="text-lg font-extrabold text-ink mb-4">Wallet Connection</h2>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-bold text-ink mb-2">
                       Stellar Wallet Address
                     </label>
                     <div className="flex gap-3">
@@ -203,19 +305,19 @@ export default function SettingsPage() {
                         value={walletAddress}
                         onChange={(e) => setWalletAddress(e.target.value)}
                         placeholder="GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition font-mono text-sm text-black"
+                        className="input-brutal flex-1 font-mono text-sm"
                       />
                       <button
                         onClick={handleConnectWallet}
-                        className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition whitespace-nowrap"
+                        className="btn-brutal btn-brutal-lime whitespace-nowrap"
                       >
                         Connect Wallet
                       </button>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+                    <p className="text-xs text-muted mt-2 flex items-center gap-1 font-medium">
                       {walletAddress ? (
                         <>
-                          <HugeiconsIcon icon={CheckmarkCircleIcon} size={14} strokeWidth={1.5} className="text-green-600" />
+                          <HugeiconsIcon icon={CheckmarkCircleIcon} size={14} strokeWidth={2} className="text-ink" />
                           Wallet connected
                         </>
                       ) : (
@@ -226,20 +328,68 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="flex gap-4 pt-6 border-t border-gray-200">
+              {/* Fiat on/off-ramp via a Stellar anchor (SEP-24). Add funds
+                  (deposit) mints the asset into the wallet; Cash out (withdraw)
+                  sends it back to a bank. Both need a connected wallet. On
+                  testnet this hits the SDF reference anchor and moves SRT, not
+                  real money. */}
+              <div className="border-t-2 border-ink pt-6">
+                <h2 className="text-lg font-extrabold text-ink mb-1">Add Funds &amp; Cash Out</h2>
+                <p className="text-xs text-muted mb-4 font-medium">
+                  Move {anchorConfig.assetCode} between your bank and your wallet through{' '}
+                  <span className="font-mono">{anchorConfig.homeDomain}</span>.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <button
+                      onClick={handleDeposit}
+                      disabled={depositing || withdrawing || !walletAddress}
+                      className="btn-brutal btn-brutal-primary w-full"
+                    >
+                      {depositing ? 'Adding funds…' : `Add ${anchorConfig.assetCode}`}
+                    </button>
+                    {depositStatus && (
+                      <p className="text-sm text-ink mt-3 flex items-center gap-2 font-medium animate-pulse">
+                        {DEPOSIT_STATUS_LABELS[depositStatus] || depositStatus}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <button
+                      onClick={handleWithdraw}
+                      disabled={withdrawing || depositing || !walletAddress}
+                      className="btn-brutal btn-brutal-lime w-full"
+                    >
+                      {withdrawing ? 'Withdrawing…' : `Cash out ${anchorConfig.assetCode}`}
+                    </button>
+                    {withdrawStatus && (
+                      <p className="text-sm text-ink mt-3 flex items-center gap-2 font-medium animate-pulse">
+                        {WITHDRAW_STATUS_LABELS[withdrawStatus] || withdrawStatus}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-muted mt-3 font-medium">
+                  Testnet sandbox — moves {anchorConfig.assetCode} against the SDF reference
+                  anchor with fake KYC, not real funds. Add {anchorConfig.assetCode} first,
+                  then you have a balance to cash out.
+                </p>
+              </div>
+
+              <div className="flex gap-4 pt-6 border-t-2 border-ink">
                 <button
                   onClick={handleSave}
                   disabled={updating}
-                  className="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition font-semibold"
+                  className="btn-brutal btn-brutal-primary flex-1"
                 >
                   {updating ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow border border-gray-200 p-8 text-center">
-              <p className="text-gray-600 mb-4">You need to create a username first</p>
-              <a href="/auth/username" className="text-indigo-600 hover:underline font-semibold">
+            <div className="card-brutal p-8 text-center">
+              <p className="text-muted mb-4 font-medium">You need to create a username first</p>
+              <a href="/auth/username" className="text-primary hover:underline font-bold">
                 Go to Create Username
               </a>
             </div>
@@ -252,7 +402,7 @@ export default function SettingsPage() {
                 logout();
                 window.location.href = '/';
               }}
-              className="px-6 py-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 transition font-semibold"
+              className="btn-brutal btn-brutal-white"
             >
               Sign Out
             </button>

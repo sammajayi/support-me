@@ -71,6 +71,19 @@ function jsonResponse(body: unknown, ok = true) {
   return { ok, json: async () => body } as Response;
 }
 
+// Route fetch by URL rather than call order. The dashboard now also fires
+// `fetch('/api/prices')` (via usePrices), so an ordered mock queue would be
+// consumed by the prices call. Any unmatched URL (including /api/prices)
+// resolves to an empty-ish payload.
+function mockFetchByUrl({ creators, donations }: { creators?: unknown; donations?: unknown }) {
+  vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/api/creators')) return Promise.resolve(jsonResponse(creators ?? []));
+    if (url.includes('/api/donations')) return Promise.resolve(jsonResponse(donations ?? []));
+    return Promise.resolve(jsonResponse({ prices: {} }));
+  });
+}
+
 describe('DashboardPage', () => {
   beforeEach(() => {
     mockUseAuth.mockReturnValue({
@@ -99,9 +112,7 @@ describe('DashboardPage', () => {
   });
 
   it('renders stats and recent donations once data has loaded', async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonResponse([creator]))
-      .mockResolvedValueOnce(jsonResponse([donation]));
+    mockFetchByUrl({ creators: [creator], donations: [donation] });
 
     render(<DashboardPage />);
 
@@ -112,7 +123,7 @@ describe('DashboardPage', () => {
   });
 
   it('prompts profile creation when the user has no creator profile yet', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse([]));
+    mockFetchByUrl({ creators: [] });
 
     render(<DashboardPage />);
 
@@ -122,9 +133,7 @@ describe('DashboardPage', () => {
   });
 
   it('prepends a new donation received over SSE and shows a toast', async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonResponse([creator]))
-      .mockResolvedValueOnce(jsonResponse([donation]));
+    mockFetchByUrl({ creators: [creator], donations: [donation] });
 
     render(<DashboardPage />);
 
