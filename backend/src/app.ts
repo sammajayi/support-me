@@ -3,6 +3,7 @@ import cors from "cors";
 import authRouter from "./routes/auth";
 import creatorsRouter from "./routes/creators";
 import donationsRouter from "./routes/donations";
+import withdrawalsRouter from "./routes/withdrawals";
 import eventsRouter from "./routes/events";
 import { errorHandler } from "./middleware/errorHandler";
 
@@ -18,6 +19,7 @@ app.get("/health", (req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/creators", creatorsRouter);
 app.use("/api/donations", donationsRouter);
+app.use("/api/withdrawals", withdrawalsRouter);
 app.use("/api/events", eventsRouter);
 
 app.use((req, res) => {

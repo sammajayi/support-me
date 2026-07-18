@@ -224,6 +224,35 @@ export default function AppHubPage() {
     }
   };
 
+  // Persist a completed cash-out to the backend so it shows up in the dashboard's
+  // activity feed. Best-effort: the funds have already moved, so a logging
+  // failure must never surface as a withdrawal error. The endpoint is idempotent
+  // on the anchor tx id, so a retry can't create duplicates.
+  const recordWithdrawal = async (tx: any) => {
+    if (!creator || !token) return;
+    try {
+      await fetch(`${API_URL}/api/withdrawals`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          creatorUsername: creator.username,
+          amountIn: Number(tx.amount_in),
+          amountOut: tx.amount_out != null ? Number(tx.amount_out) : undefined,
+          fee: tx.amount_fee != null ? Number(tx.amount_fee) : undefined,
+          currency: anchorConfig.assetCode,
+          anchorTxId: tx.id,
+          stellarTxId: tx.stellar_transaction_id,
+          status: tx.status,
+        }),
+      });
+    } catch {
+      // Swallow: the withdrawal itself succeeded.
+    }
+  };
+
   const handleWithdraw = async () => {
     if (!walletAddress) {
       toast.error('No wallet connected');
@@ -239,6 +268,7 @@ export default function AppHubPage() {
         toast('Withdrawal cancelled');
       } else if (result.status === 'completed') {
         toast.success('Withdrawal complete — funds are on their way to your bank.');
+        await recordWithdrawal(result);
       } else {
         toast(`Withdrawal ended with status: ${result.status}`);
       }

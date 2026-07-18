@@ -25,12 +25,13 @@ model Creator {
   bio           String?
   avatarUrl     String?
   socialLinks   Json?
-  acceptsXlm    Boolean    @default(true)
-  acceptsUsdc   Boolean    @default(true)
+  acceptsXlm    Boolean      @default(true)
+  acceptsUsdc   Boolean      @default(true)
   donationGoal  Int?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
   donations     Donation[]
+  withdrawals   Withdrawal[]
 }
 
 model Donation {
@@ -43,4 +44,22 @@ model Donation {
   message         String?
   transactionHash String?
   createdAt       DateTime @default(now())
+}
+
+model Withdrawal {
+  id          Int      @id @default(autoincrement())
+  creator     Creator  @relation(fields: [creatorId], references: [id])
+  creatorId   Int
+  amountIn    Float // crypto withdrawn (SEP-24 amount_in)
+  amountOut   Float? // fiat received (amount_out), when the anchor reports it
+  fee         Float? // amount_fee
+  currency    String   @default("USDC") // asset withdrawn
+  anchorTxId  String // SEP-24 transaction id
+  stellarTxId String? // on-chain payment to the anchor (stellar_transaction_id)
+  status      String   @default("completed")
+  createdAt   DateTime @default(now())
+
+  // A given anchor transaction maps to exactly one withdrawal record. Lets the
+  // POST handler be idempotent when the completion path fires more than once.
+  @@unique([creatorId, anchorTxId])
 }

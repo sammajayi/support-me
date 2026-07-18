@@ -36,10 +36,29 @@ interface Donation {
   createdAt: string;
 }
 
+interface Withdrawal {
+  id: number | string;
+  amountIn: number;
+  amountOut: number | null;
+  fee: number | null;
+  currency: string;
+  anchorTxId: string;
+  stellarTxId: string | null;
+  status: string;
+  createdAt: string;
+}
+
+// A single row in the merged Recent Activity feed — either an incoming tip or an
+// outgoing cash-out — tagged so the UI can style and link each kind differently.
+type ActivityItem =
+  | { kind: 'donation'; createdAt: string; data: Donation }
+  | { kind: 'withdrawal'; createdAt: string; data: Withdrawal };
+
 export default function DashboardPage() {
   const { user, token } = useAuth();
   const [creator, setCreator] = useState<Creator | null>(null);
   const [donations, setDonations] = useState<Donation[]>([]);
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const prices = usePrices();
@@ -69,14 +88,23 @@ export default function DashboardPage() {
 
         setCreator(userCreator);
 
-        const resDonations = await fetch(
-          `${API_URL}/api/donations?creatorUsername=${userCreator.username}`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
-        );
+        const [resDonations, resWithdrawals] = await Promise.all([
+          fetch(`${API_URL}/api/donations?creatorUsername=${userCreator.username}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          }),
+          fetch(`${API_URL}/api/withdrawals?creatorUsername=${userCreator.username}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          }),
+        ]);
 
         if (resDonations.ok) {
           const donationsData = await resDonations.json();
           setDonations(Array.isArray(donationsData) ? donationsData : []);
+        }
+
+        if (resWithdrawals.ok) {
+          const withdrawalsData = await resWithdrawals.json();
+          setWithdrawals(Array.isArray(withdrawalsData) ? withdrawalsData : []);
         }
       } catch (err) {
         setError((err as Error).message);
@@ -200,6 +228,20 @@ export default function DashboardPage() {
     .filter((d) => d.currency === 'USDC')
     .reduce((sum, d) => sum + d.amount, 0);
 
+  // Total cashed out, by asset withdrawn. Kept separate from the received-volume
+  // cards above so those stay a clean lifetime-received figure.
+  const withdrawnByCurrency = withdrawals.reduce<Record<string, number>>((acc, w) => {
+    acc[w.currency] = (acc[w.currency] || 0) + w.amountIn;
+    return acc;
+  }, {});
+  const withdrawnTotal = withdrawals.reduce((sum, w) => sum + w.amountIn, 0);
+
+  // Merge tips and cash-outs into one time-ordered feed.
+  const activity: ActivityItem[] = [
+    ...donations.map((d) => ({ kind: 'donation' as const, createdAt: d.createdAt, data: d })),
+    ...withdrawals.map((w) => ({ kind: 'withdrawal' as const, createdAt: w.createdAt, data: w })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-background">
@@ -213,8 +255,8 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Volume by asset */}
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
+          {/* Volume by asset, plus lifetime cashed out */}
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
             <div className="card-brutal bg-brand-cyan p-6">
               <p className="text-ink text-sm font-bold uppercase tracking-wide">XLM Volume</p>
               <p className="text-4xl font-extrabold text-ink mt-2 tabular-nums">
@@ -233,6 +275,20 @@ export default function DashboardPage() {
                 <p className="text-sm font-bold text-ink/70 mt-1">{formatUsd(usdcVolume, 'USDC', prices)}</p>
               )}
             </div>
+            <div className="card-brutal bg-card p-6">
+              <p className="text-ink text-sm font-bold uppercase tracking-wide">Withdrawn</p>
+              {withdrawnTotal === 0 ? (
+                <p className="text-4xl font-extrabold text-ink/40 mt-2 tabular-nums">—</p>
+              ) : (
+                <div className="mt-2 space-y-1">
+                  {Object.entries(withdrawnByCurrency).map(([currency, amount]) => (
+                    <p key={currency} className="text-3xl font-extrabold text-ink tabular-nums">
+                      {amount.toFixed(2)} <span className="text-xl">{currency}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Earnings over time chart */}
@@ -240,34 +296,78 @@ export default function DashboardPage() {
             <TipChart donations={donations} />
           </div>
 
-          {/* Recent Donations */}
+          {/* Recent Activity — tips received and cash-outs, newest first */}
           <div className="card-brutal p-6">
-            <h2 className="text-lg font-extrabold text-ink mb-4">Recent Donations</h2>
-            {donations.length === 0 ? (
-              <p className="text-muted font-medium">No donations yet. Share your profile link to get started!</p>
+            <h2 className="text-lg font-extrabold text-ink mb-4">Recent Activity</h2>
+            {activity.length === 0 ? (
+              <p className="text-muted font-medium">No activity yet. Share your profile link to get started!</p>
             ) : (
               <ul className="divide-y divide-ink/10">
-                {donations.map((donation) => {
-                  const hasHash = Boolean(donation.transactionHash);
-                  const usd = formatUsd(donation.amount, donation.currency, prices);
+                {activity.map((item) => {
+                  if (item.kind === 'donation') {
+                    const donation = item.data;
+                    const hasHash = Boolean(donation.transactionHash);
+                    const usd = formatUsd(donation.amount, donation.currency, prices);
+                    const row = (
+                      <div className="flex items-center gap-3 py-2.5">
+                        <span className="text-sm font-extrabold text-primary whitespace-nowrap tabular-nums">
+                          +{donation.amount} {donation.currency}
+                        </span>
+                        {usd && (
+                          <span className="text-xs text-muted whitespace-nowrap tabular-nums">{usd}</span>
+                        )}
+                        <span className="text-xs text-muted font-mono whitespace-nowrap">
+                          {donation.senderAddress.slice(0, 6)}…{donation.senderAddress.slice(-4)}
+                        </span>
+                        {donation.message && (
+                          <span className="text-sm text-ink font-medium truncate flex-1 min-w-0">
+                            {donation.message}
+                          </span>
+                        )}
+                        <span className="text-xs text-muted whitespace-nowrap ml-auto pl-2">
+                          {new Date(donation.createdAt).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                      </div>
+                    );
+
+                    return (
+                      <li key={`donation-${donation.id}`}>
+                        {hasHash ? (
+                          <a
+                            href={explorerTxUrl(donation.transactionHash)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="View transaction on Stellar Expert"
+                            className="block -mx-2 px-2 rounded hover:bg-accent-bg focus:bg-accent-bg focus:outline-none transition-colors"
+                          >
+                            {row}
+                          </a>
+                        ) : (
+                          <div className="-mx-2 px-2">{row}</div>
+                        )}
+                      </li>
+                    );
+                  }
+
+                  const withdrawal = item.data;
+                  const hasHash = Boolean(withdrawal.stellarTxId);
+                  const usd = formatUsd(withdrawal.amountIn, withdrawal.currency, prices);
                   const row = (
                     <div className="flex items-center gap-3 py-2.5">
-                      <span className="text-sm font-extrabold text-primary whitespace-nowrap tabular-nums">
-                        {donation.amount} {donation.currency}
+                      <span className="text-sm font-extrabold text-brand-pink whitespace-nowrap tabular-nums">
+                        −{withdrawal.amountIn} {withdrawal.currency}
                       </span>
                       {usd && (
                         <span className="text-xs text-muted whitespace-nowrap tabular-nums">{usd}</span>
                       )}
-                      <span className="text-xs text-muted font-mono whitespace-nowrap">
-                        {donation.senderAddress.slice(0, 6)}…{donation.senderAddress.slice(-4)}
+                      <span className="text-xs font-bold text-ink uppercase tracking-wide whitespace-nowrap">
+                        Cash out
                       </span>
-                      {donation.message && (
-                        <span className="text-sm text-ink font-medium truncate flex-1 min-w-0">
-                          {donation.message}
-                        </span>
-                      )}
                       <span className="text-xs text-muted whitespace-nowrap ml-auto pl-2">
-                        {new Date(donation.createdAt).toLocaleDateString(undefined, {
+                        {new Date(withdrawal.createdAt).toLocaleDateString(undefined, {
                           month: 'short',
                           day: 'numeric',
                         })}
@@ -276,10 +376,10 @@ export default function DashboardPage() {
                   );
 
                   return (
-                    <li key={donation.id}>
+                    <li key={`withdrawal-${withdrawal.id}`}>
                       {hasHash ? (
                         <a
-                          href={explorerTxUrl(donation.transactionHash)}
+                          href={explorerTxUrl(withdrawal.stellarTxId as string)}
                           target="_blank"
                           rel="noopener noreferrer"
                           title="View transaction on Stellar Expert"

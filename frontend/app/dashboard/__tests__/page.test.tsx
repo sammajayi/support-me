@@ -77,6 +77,18 @@ const donation = {
   createdAt: '2026-01-01T00:00:00.000Z',
 };
 
+const withdrawal = {
+  id: 1,
+  amountIn: 12,
+  amountOut: 11.5,
+  fee: 0.5,
+  currency: 'USDC',
+  anchorTxId: 'anchor-1',
+  stellarTxId: 'stellar-1',
+  status: 'completed',
+  createdAt: '2026-01-02T00:00:00.000Z',
+};
+
 function jsonResponse(body: unknown, ok = true) {
   return { ok, json: async () => body } as Response;
 }
@@ -85,9 +97,20 @@ function jsonResponse(body: unknown, ok = true) {
 // `fetch('/api/prices')` (via usePrices), so an ordered mock queue would be
 // consumed by the prices call. Any unmatched URL (including /api/prices)
 // resolves to an empty-ish payload.
-function mockFetchByUrl({ creators, donations }: { creators?: unknown; donations?: unknown }) {
+function mockFetchByUrl({
+  creators,
+  donations,
+  withdrawals,
+}: {
+  creators?: unknown;
+  donations?: unknown;
+  withdrawals?: unknown;
+}) {
   vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
+    // Check withdrawals before creators: both contain no overlapping substring,
+    // but keep the donations/withdrawals checks ahead of the bare /api/creators.
+    if (url.includes('/api/withdrawals')) return Promise.resolve(jsonResponse(withdrawals ?? []));
     if (url.includes('/api/creators')) return Promise.resolve(jsonResponse(creators ?? []));
     if (url.includes('/api/donations')) return Promise.resolve(jsonResponse(donations ?? []));
     return Promise.resolve(jsonResponse({ prices: {} }));
@@ -136,6 +159,26 @@ describe('DashboardPage', () => {
     // The creator loads, so the SSE effect subscribes. Wait for it here so the
     // effect runs while EventSource is still stubbed — otherwise it flushes
     // after afterEach tears the stub down and throws "EventSource is not defined".
+    await waitFor(() => expect(FakeEventSource.instances.length).toBe(1));
+  });
+
+  it('renders withdrawals in the activity feed and the withdrawn total', async () => {
+    mockFetchByUrl({ creators: [creator], donations: [donation], withdrawals: [withdrawal] });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
+
+    // The cash-out row shows a signed, negative amount and a "Cash out" label.
+    expect(screen.getByText('−12 USDC')).toBeInTheDocument();
+    expect(screen.getByText('Cash out')).toBeInTheDocument();
+
+    // The Withdrawn card sums amountIn by asset.
+    expect(screen.getByText('Withdrawn').parentElement).toHaveTextContent('12.00 USDC');
+
+    // The tip still renders alongside it.
+    expect(screen.getByText('nice work')).toBeInTheDocument();
+
     await waitFor(() => expect(FakeEventSource.instances.length).toBe(1));
   });
 
