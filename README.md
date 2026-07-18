@@ -336,7 +336,30 @@ NEXT_PUBLIC_DONATION_CONTRACT_ID=CD6T563YCSYQHDMXC7VCFTKMWMXWHFHAU4NO7EAMFK57QLF
 NEXT_PUBLIC_DONATION_CONTRACT_ID=CD6T563YCSYQHDMXC7VCFTKMWMXWHFHAU4NO7EAMFK57QLFI7SSXICYY
 NEXT_PUBLIC_CREATOR_REGISTRY_CONTRACT_ID=CCJL2GIWNNWECKGSEY2EXEGKBMN2LYJ3HVNJNZEO2AUXC4LRR7THG2U6
 NEXT_PUBLIC_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+
+# SEP-24 cash-out anchor. Optional — if unset, the app defaults to the SDF
+# reference anchor (testanchor.stellar.org / SRT). For local development
+# against the self-hosted anchor, run `cd anchor && ./setup.sh` and set:
+NEXT_PUBLIC_ANCHOR_HOME_DOMAIN=localhost:8080
+NEXT_PUBLIC_ANCHOR_ASSET_CODE=USDC
 ```
+
+**Deploying to Vercel:** do not ship `localhost:8080` — `NEXT_PUBLIC_` vars
+are baked into the browser bundle at build time, so a visitor's browser would
+try to reach `localhost` on *their own* machine. For a hosted testnet demo
+with no infrastructure to run, set these in the Vercel project's environment
+variables and redeploy:
+
+```env
+NEXT_PUBLIC_ANCHOR_HOME_DOMAIN=testanchor.stellar.org
+NEXT_PUBLIC_ANCHOR_ASSET_CODE=SRT
+```
+
+This uses the SDF public reference anchor (settles in the `SRT` test asset;
+its backend errors intermittently server-side). To run the demo on *your own*
+USDC anchor instead, the Docker stack in [`anchor/`](anchor/) must run on a
+public host with HTTPS (Vercel can't host containers) and
+`NEXT_PUBLIC_ANCHOR_HOME_DOMAIN` must point at that domain.
 
 ## Development Workflow
 
