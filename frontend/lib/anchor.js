@@ -312,6 +312,25 @@ export async function sendWithdrawPayment(config, account, tx) {
     const res = await horizon.submitTransaction(signedTx);
     return res.hash;
   } catch (err) {
+    // Horizon returns the failure reason in extras.result_codes; surface the
+    // common ones as plain language instead of a generic "submit failed" that
+    // forces the user into DevTools. op_underfunded is the usual one: the
+    // anchor asked for more than the account holds.
+    const ops = err?.response?.data?.extras?.result_codes?.operations || [];
+    if (ops.includes('op_underfunded')) {
+      throw new AnchorError(
+        'payment-submit',
+        `Your ${config.assetCode} balance is too low to send ${amount_in} ${config.assetCode} for this withdrawal.`,
+        err,
+      );
+    }
+    if (ops.includes('op_no_trust') || ops.includes('op_no_issuer')) {
+      throw new AnchorError(
+        'payment-submit',
+        `Your account can't send ${config.assetCode} to the anchor — the ${config.assetCode} trustline is missing.`,
+        err,
+      );
+    }
     throw new AnchorError('payment-submit', 'Failed to submit the withdrawal payment to the network.', err);
   }
 }

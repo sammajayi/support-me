@@ -4,7 +4,7 @@
 // other cases here — TOML resolution and fetch polling — are env-agnostic.)
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as StellarSdk from '@stellar/stellar-sdk';
-import { loadAnchorConfig, pollWithdraw, ensureTrustline, AnchorError } from '@/lib/anchor';
+import { loadAnchorConfig, pollWithdraw, ensureTrustline, sendWithdrawPayment, AnchorError } from '@/lib/anchor';
 import { signTransaction } from '@/lib/wallet';
 
 // The anchor module signs with the wallet; those paths aren't exercised here.
@@ -183,6 +183,77 @@ describe('ensureTrustline', () => {
     await expect(ensureTrustline(config, account)).rejects.toMatchObject({
       name: 'AnchorError',
       step: 'trustline-sign',
+    });
+  });
+});
+
+describe('sendWithdrawPayment', () => {
+  const keypair = StellarSdk.Keypair.random();
+  const account = keypair.publicKey();
+  const config = { assetCode: 'USDC', assetIssuer: StellarSdk.Keypair.random().publicKey() } as never;
+  const tx = {
+    withdraw_anchor_account: StellarSdk.Keypair.random().publicKey(),
+    amount_in: '10',
+    withdraw_memo: '1234567890',
+    withdraw_memo_type: 'id',
+  };
+
+  afterEach(() => vi.restoreAllMocks());
+
+  // Signs the built XDR locally so the submitted tx is well-formed.
+  const mockWalletSign = () =>
+    vi.mocked(signTransaction).mockImplementation(async (xdr: string) => {
+      const built = StellarSdk.TransactionBuilder.fromXDR(xdr, StellarSdk.Networks.TESTNET);
+      built.sign(keypair);
+      return { signedTxXdr: built.toEnvelope().toXDR('base64') };
+    });
+
+  it('builds a payment to the anchor with the memo, signs, and submits', async () => {
+    vi.spyOn(StellarSdk.Horizon.Server.prototype, 'loadAccount')
+      .mockResolvedValue(new StellarSdk.Account(account, '123') as never);
+    const submit = vi
+      .spyOn(StellarSdk.Horizon.Server.prototype, 'submitTransaction')
+      .mockResolvedValue({ hash: 'withdraw-hash' } as never);
+    mockWalletSign();
+
+    const hash = await sendWithdrawPayment(config, account, tx);
+
+    expect(hash).toBe('withdraw-hash');
+    const submitted = submit.mock.calls[0][0] as StellarSdk.Transaction;
+    expect(submitted.operations[0].type).toBe('payment');
+    expect((submitted.operations[0] as StellarSdk.Operation.Payment).destination).toBe(
+      tx.withdraw_anchor_account,
+    );
+    expect(submitted.memo.value?.toString()).toBe(tx.withdraw_memo);
+  });
+
+  it('maps op_underfunded to a clear balance message', async () => {
+    vi.spyOn(StellarSdk.Horizon.Server.prototype, 'loadAccount')
+      .mockResolvedValue(new StellarSdk.Account(account, '123') as never);
+    vi.spyOn(StellarSdk.Horizon.Server.prototype, 'submitTransaction').mockRejectedValue({
+      response: { data: { extras: { result_codes: { operations: ['op_underfunded'] } } } },
+    });
+    mockWalletSign();
+
+    await expect(sendWithdrawPayment(config, account, tx)).rejects.toMatchObject({
+      name: 'AnchorError',
+      step: 'payment-submit',
+      message: expect.stringMatching(/balance is too low/i),
+    });
+  });
+
+  it('falls back to the generic submit error for other Horizon failures', async () => {
+    vi.spyOn(StellarSdk.Horizon.Server.prototype, 'loadAccount')
+      .mockResolvedValue(new StellarSdk.Account(account, '123') as never);
+    vi.spyOn(StellarSdk.Horizon.Server.prototype, 'submitTransaction').mockRejectedValue({
+      response: { data: { extras: { result_codes: { transaction: 'tx_bad_seq' } } } },
+    });
+    mockWalletSign();
+
+    await expect(sendWithdrawPayment(config, account, tx)).rejects.toMatchObject({
+      name: 'AnchorError',
+      step: 'payment-submit',
+      message: expect.stringMatching(/Failed to submit/i),
     });
   });
 });
