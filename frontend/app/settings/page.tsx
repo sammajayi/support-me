@@ -18,6 +18,7 @@ interface Creator {
   userId: number;
   username: string;
   displayName: string | null;
+  bio: string | null;
   walletAddress: string;
   avatarUrl: string | null;
   socialLinks: Record<string, string> | null;
@@ -34,6 +35,7 @@ export default function SettingsPage() {
   const [uploading, setUploading] = useState(false);
 
   const [displayName, setDisplayName] = useState('');
+  const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [acceptsXlm, setAcceptsXlm] = useState(true);
   const [acceptsUsdc, setAcceptsUsdc] = useState(true);
@@ -57,6 +59,7 @@ export default function SettingsPage() {
         if (mine) {
           setCreator(mine);
           setDisplayName(mine.displayName || '');
+          setBio(mine.bio || '');
           setAvatarUrl(mine.avatarUrl || '');
           setAcceptsXlm(mine.acceptsXlm ?? true);
           setAcceptsUsdc(mine.acceptsUsdc ?? true);
@@ -129,6 +132,9 @@ export default function SettingsPage() {
         },
         body: JSON.stringify({
           displayName: displayName.trim() || undefined,
+          // Send the trimmed value (even when empty) so an emptied bio clears
+          // the saved one — dropping to undefined would leave the old text.
+          bio: bio.trim(),
           avatarUrl: avatarUrl || undefined,
           acceptsXlm,
           acceptsUsdc,
@@ -248,6 +254,22 @@ export default function SettingsPage() {
                   placeholder={creator.username}
                   className="input-brutal"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="bio" className="block text-sm font-bold text-ink mb-2">
+                  Bio
+                </label>
+                <textarea
+                  id="bio"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  maxLength={500}
+                  rows={4}
+                  placeholder="Tell supporters what you're about."
+                  className="input-brutal resize-y"
+                />
+                <p className="text-xs text-muted mt-2 font-medium text-right">{bio.length}/500</p>
               </div>
             </section>
 
