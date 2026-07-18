@@ -55,8 +55,27 @@ export default function AdminPage() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [earningsCurrency, setEarningsCurrency] = useState<string | null>(null);
 
   const isAdmin = !!user && ADMIN_WALLETS.includes(user.walletAddress);
+
+  // Currencies the platform has actually earned in, in a stable order (XLM, USDC
+  // first, then anything else). Drives the total-earnings toggle.
+  const currencies = data
+    ? Object.keys(data.earningsByCurrency).sort((a, b) => {
+        const order = ['XLM', 'USDC'];
+        const ia = order.indexOf(a);
+        const ib = order.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      })
+    : [];
+
+  // Default the toggle to the first available currency once data loads.
+  useEffect(() => {
+    if (currencies.length > 0 && (!earningsCurrency || !currencies.includes(earningsCurrency))) {
+      setEarningsCurrency(currencies[0]);
+    }
+  }, [currencies, earningsCurrency]);
 
   useEffect(() => {
     const fetchOverview = async () => {
@@ -150,15 +169,32 @@ export default function AdminPage() {
               </p>
             </div>
             <div className="card-brutal bg-card p-6">
-              <p className="text-ink text-sm font-bold uppercase tracking-wide">Total earnings</p>
-              {data && Object.keys(data.earningsByCurrency).length > 0 ? (
-                <div className="mt-2 space-y-1">
-                  {Object.entries(data.earningsByCurrency).map(([currency, amount]) => (
-                    <p key={currency} className="text-3xl font-extrabold text-ink tabular-nums">
-                      {amount.toFixed(2)} <span className="text-xl">{currency}</span>
-                    </p>
-                  ))}
-                </div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-ink text-sm font-bold uppercase tracking-wide">Total earnings</p>
+                {currencies.length > 1 && (
+                  <div className="flex border-2 border-ink rounded-lg overflow-hidden shrink-0">
+                    {currencies.map((currency) => (
+                      <button
+                        key={currency}
+                        type="button"
+                        onClick={() => setEarningsCurrency(currency)}
+                        className={`px-2.5 py-1 text-xs font-bold transition-colors ${
+                          earningsCurrency === currency
+                            ? 'bg-ink text-white'
+                            : 'bg-transparent text-ink hover:bg-accent-bg'
+                        }`}
+                      >
+                        {currency}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {currencies.length > 0 && earningsCurrency ? (
+                <p className="text-4xl font-extrabold text-ink mt-2 tabular-nums">
+                  {(data?.earningsByCurrency[earningsCurrency] ?? 0).toFixed(2)}{' '}
+                  <span className="text-xl">{earningsCurrency}</span>
+                </p>
               ) : (
                 <p className="text-4xl font-extrabold text-ink/40 mt-2 tabular-nums">—</p>
               )}
