@@ -3,12 +3,28 @@ items:
   # Issued by a keypair we generate + fund in setup.sh (${USDC_ISSUER}). Because
   # WE control the issuer and the distribution account holds a balance, this
   # asset can actually settle deposits and withdrawals. SupportMe's frontend
-  # discovers the issuer from stellar.localhost.toml, so client code doesn't
-  # care which issuer this is. SEP-24 is the flow the app uses; SEP-38 blocks
-  # are required because the SEP-24 controller depends on the SEP-38 calculator.
+  # discovers the issuer from stellar.localhost.toml. This entry mirrors the
+  # SDF quick-run "native" asset shape exactly (which boots cleanly), so every
+  # enabled SEP validates.
   - id: stellar:USDC:${USDC_ISSUER}
     distribution_account: ${DISTRIBUTION_ACCOUNT}
     significant_decimals: 7
+    sep6:
+      enabled: true
+      deposit:
+        enabled: true
+        min_amount: 0
+        max_amount: 10000
+        methods:
+          - SEPA
+          - SWIFT
+      withdraw:
+        enabled: true
+        min_amount: 0
+        max_amount: 10000
+        methods:
+          - bank_account
+          - cash
     sep24:
       enabled: true
       deposit:
@@ -25,15 +41,33 @@ items:
         methods:
           - bank_account
           - cash
+    sep31:
+      enabled: false
     sep38:
       enabled: true
       exchangeable_assets:
         - iso4217:USD
 
-  # Native XLM.
+  # Native XLM (verbatim from SDF quick-run).
   - id: stellar:native
     distribution_account: ${DISTRIBUTION_ACCOUNT}
     significant_decimals: 7
+    sep6:
+      enabled: true
+      deposit:
+        enabled: true
+        min_amount: 0
+        max_amount: 10000
+        methods:
+          - SEPA
+          - SWIFT
+      withdraw:
+        enabled: true
+        min_amount: 0
+        max_amount: 10000
+        methods:
+          - bank_account
+          - cash
     sep24:
       enabled: true
       deposit:
@@ -50,15 +84,26 @@ items:
         methods:
           - bank_account
           - cash
+    sep31:
+      enabled: false
     sep38:
       enabled: true
       exchangeable_assets:
         - iso4217:USD
 
-  # Fiat counter-currency for SEP-38 quotes. SEP-38 only (SEP-31 stays off, so
-  # no receive method is required — that was the original boot failure).
+  # Fiat counter-currency (verbatim from SDF quick-run). The validator requires
+  # SEP-31 receive methods on a fiat asset even when sep31.enabled is false —
+  # that requirement is why the receive block must stay.
   - id: iso4217:USD
     significant_decimals: 4
+    sep31:
+      enabled: false
+      receive:
+        min_amount: 0
+        max_amount: 1000000
+        methods:
+          - SEPA
+          - SWIFT
     sep38:
       enabled: true
       exchangeable_assets:

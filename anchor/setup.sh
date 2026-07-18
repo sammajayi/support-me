@@ -57,6 +57,26 @@ echo "  USDC issuer:  $USDC_ISSUER"
 echo -e "${GREEN}Step 2: issue local USDC (trustline + mint to distribution)${NC}"
 node issue-usdc.mjs "$USDC_ISSUER_SECRET" "$DISTRIBUTION_ACCOUNT_SECRET_KEY"
 
+echo -e "${GREEN}Step 2b: deploy the USDC Stellar Asset Contract (SAC)${NC}"
+# The reference server settles SEP-24 deposits/withdrawals by invoking transfer()
+# on the asset's SAC (not a classic Horizon payment — see reference-config
+# comments). That contract must exist on-chain or simulation fails with
+# Error(Storage, MissingValue). `contract asset deploy` is idempotent-ish: it
+# errors if the SAC already exists, which we tolerate on re-runs.
+if stellar contract asset deploy \
+    --asset "USDC:$USDC_ISSUER" \
+    --source-account ap-distribution-account \
+    --network testnet 2>deploy.err; then
+  echo "  ✓ USDC SAC deployed"
+else
+  if grep -qiE "already|exist" deploy.err; then
+    echo "  ✓ USDC SAC already deployed (reused)"
+  else
+    echo -e "  ${RED}✗ USDC SAC deploy failed:${NC}"; cat deploy.err; rm -f deploy.err; exit 1
+  fi
+fi
+rm -f deploy.err
+
 echo -e "${GREEN}Step 3: render config from templates${NC}"
 sed -e "s|\${DISTRIBUTION_ACCOUNT_SECRET_KEY}|$DISTRIBUTION_ACCOUNT_SECRET_KEY|g" \
     -e "s|\${DISTRIBUTION_ACCOUNT}|$DISTRIBUTION_ACCOUNT|g" \

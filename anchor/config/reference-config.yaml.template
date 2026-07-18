@@ -11,6 +11,14 @@ app:
   distributionWalletMemoType:
   enableTest: true
   custodyEnabled: false
+  # rpcEnabled only selects the status-update STYLE (SEP JSON-RPC notify_* calls
+  # when true; the older platform-API style when false). It does NOT change how
+  # funds settle: in reference-server 4.6.0 the settlement path (PaymentClient →
+  # DepositService/WithdrawalService) ALWAYS builds an InvokeHostFunctionOperation
+  # calling transfer() on the asset's Stellar Asset Contract (SAC) — there is no
+  # classic-Horizon-payment branch. So the USDC SAC MUST be deployed on testnet;
+  # setup.sh does this (stellar contract asset deploy). If the SAC is missing,
+  # simulation fails with Error(Storage, MissingValue) regardless of this flag.
   rpcEnabled: true
   # Secret seed used to sign settlement payments. Injected by setup.sh.
   paymentSigningSeed: ${DISTRIBUTION_ACCOUNT_SECRET_KEY}
