@@ -152,8 +152,8 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
 
     // The single 5 XLM donation shows up as XLM volume, with USDC at zero.
-    expect(screen.getByText('XLM Volume').nextElementSibling).toHaveTextContent('5.00 XLM');
-    expect(screen.getByText('USDC Volume').nextElementSibling).toHaveTextContent('0.00 USDC');
+    expect(screen.getByText('XLM Volume').nextElementSibling).toHaveTextContent('5 XLM');
+    expect(screen.getByText('USDC Volume').nextElementSibling).toHaveTextContent('0 USDC');
     expect(screen.getByText('nice work')).toBeInTheDocument();
 
     // The creator loads, so the SSE effect subscribes. Wait for it here so the
@@ -169,12 +169,12 @@ describe('DashboardPage', () => {
 
     await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
 
-    // The cash-out row shows a signed, negative amount and a "Cash out" label.
+    // The cash-out row shows a signed, negative amount and a "Withdraw" label.
     expect(screen.getByText('−12 USDC')).toBeInTheDocument();
-    expect(screen.getByText('Cash out')).toBeInTheDocument();
+    expect(screen.getByText('Withdraw')).toBeInTheDocument();
 
     // The Withdrawn card sums amountIn by asset.
-    expect(screen.getByText('Withdrawn').parentElement).toHaveTextContent('12.00 USDC');
+    expect(screen.getByText('Withdrawn').parentElement).toHaveTextContent('12 USDC');
 
     // The tip still renders alongside it.
     expect(screen.getByText('nice work')).toBeInTheDocument();
