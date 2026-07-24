@@ -215,10 +215,10 @@ export default function AppHubPage() {
                   const usd = bal != null ? formatUsd(parseFloat(bal), code, prices) : null;
                   return (
                     <div key={code} className="flex items-baseline gap-3">
-                      <span className="text-3xl sm:text-4xl font-extrabold text-ink tabular-nums">
+                      <span className="text-2xl sm:text-3xl font-extrabold text-ink tabular-nums">
                         {bal ?? '—'}
                       </span>
-                      <span className="text-lg font-bold text-ink/70">{code}</span>
+                      <span className="text-base font-bold text-ink/70">{code}</span>
                       {usd && <span className="text-sm font-bold text-ink/60">{usd}</span>}
                     </div>
                   );
