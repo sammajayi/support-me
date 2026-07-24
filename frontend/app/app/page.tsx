@@ -216,7 +216,7 @@ export default function AppHubPage() {
                   return (
                     <div key={code} className="flex items-baseline gap-3">
                       <span className="text-2xl sm:text-3xl font-extrabold text-ink tabular-nums">
-                        {bal ?? '—'}
+                        {bal != null ? Number(bal).toLocaleString() : '—'}
                       </span>
                       <span className="text-base font-bold text-ink/70">{code}</span>
                       {usd && <span className="text-sm font-bold text-ink/60">{usd}</span>}

@@ -89,10 +89,10 @@ export default function WithdrawPage() {
             ) : (
               <div className="flex flex-wrap gap-x-6 gap-y-1">
                 <span className="text-xl font-extrabold text-ink tabular-nums">
-                  {xlmBalance ?? '—'} <span className="text-base font-bold text-ink/70">XLM</span>
+                  {xlmBalance != null ? Number(xlmBalance).toLocaleString() : '—'} <span className="text-base font-bold text-ink/70">XLM</span>
                 </span>
                 <span className="text-xl font-extrabold text-ink tabular-nums">
-                  {usdcBalance ?? '—'} <span className="text-base font-bold text-ink/70">USDC</span>
+                  {usdcBalance != null ? Number(usdcBalance).toLocaleString() : '—'} <span className="text-base font-bold text-ink/70">USDC</span>
                 </span>
               </div>
             )}

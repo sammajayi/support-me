@@ -260,7 +260,7 @@ export default function DashboardPage() {
             <div className="card-brutal bg-brand-cyan p-6">
               <p className="text-ink text-sm font-bold uppercase tracking-wide">XLM Volume</p>
               <p className="text-2xl sm:text-3xl font-extrabold text-ink mt-2 tabular-nums">
-                {Math.round(xlmVolume)} <span className="text-xl">XLM</span>
+                {Math.round(xlmVolume).toLocaleString()} <span className="text-xl">XLM</span>
               </p>
               {formatUsd(xlmVolume, 'XLM', prices) && (
                 <p className="text-sm font-bold text-ink/70 mt-1">{formatUsd(xlmVolume, 'XLM', prices)}</p>
