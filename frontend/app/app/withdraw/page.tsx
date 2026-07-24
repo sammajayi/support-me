@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/Skeleton';
 const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const server = new StellarSdk.Horizon.Server(HORIZON_URL);
 const USDC_ISSUER = process.env.NEXT_PUBLIC_USDC_ISSUER;
-const NGN_PER_USDC = 1560;
+const NGN_PER_USDC = 1380;
 
 const NIGERIAN_BANKS = [
   'Access Bank', 'GTBank', 'Kuda', 'Opay', 'UBA', 'Zenith Bank',
