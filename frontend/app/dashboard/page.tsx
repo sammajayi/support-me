@@ -364,7 +364,7 @@ export default function DashboardPage() {
                         <span className="text-xs text-muted whitespace-nowrap tabular-nums">{usd}</span>
                       )}
                       <span className="text-xs font-bold text-ink uppercase tracking-wide whitespace-nowrap">
-                        Cash out
+                        Withdraw
                       </span>
                       <span className="text-xs text-muted whitespace-nowrap ml-auto pl-2">
                         {new Date(withdrawal.createdAt).toLocaleDateString(undefined, {

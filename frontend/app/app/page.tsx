@@ -18,43 +18,10 @@ import { Skeleton } from '@/components/Skeleton';
 import { usePrices } from '@/lib/usePrices';
 import { formatUsd } from '@/lib/prices';
 import { availableAssetCodes, getAsset } from '@/lib/assets';
-import { runWithdraw, runDeposit, anchorConfig, AnchorError } from '@/lib/anchor';
 import { API_URL } from '@/lib/api';
 
 const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const server = new StellarSdk.Horizon.Server(HORIZON_URL);
-
-// Human-readable copy for each phase the withdraw/deposit flows emit, so the
-// hub can narrate progress instead of leaking raw SEP-24 status strings. Kept
-// in sync with the labels the flows produce (see lib/anchor.js).
-const WITHDRAW_STATUS_LABELS: Record<string, string> = {
-  config: "Reading the anchor's details…",
-  auth: 'Signing in to the anchor…',
-  info: 'Checking withdrawal availability…',
-  interactive: 'Opening the anchor…',
-  pending: 'Waiting for the anchor…',
-  incomplete: 'Complete the form in the anchor window…',
-  pending_user_transfer_start: 'Sending your funds to the anchor…',
-  'sending-payment': 'Confirm the payment in your wallet…',
-  pending_anchor: 'Anchor is processing your payout…',
-  pending_external: 'Payout is on its way to your bank…',
-  completed: 'Withdrawal complete.',
-};
-
-const DEPOSIT_STATUS_LABELS: Record<string, string> = {
-  config: "Reading the anchor's details…",
-  auth: 'Signing in to the anchor…',
-  info: 'Checking deposit availability…',
-  interactive: 'Opening the anchor…',
-  pending: 'Waiting for the anchor…',
-  incomplete: 'Complete the form in the anchor window…',
-  pending_trust: `Add a trustline so your wallet can hold ${anchorConfig.assetCode}…`,
-  'adding-trustline': 'Confirm the trustline in your wallet…',
-  pending_user_transfer_start: 'Waiting for your funds to reach the anchor…',
-  pending_anchor: 'Anchor is crediting your wallet…',
-  pending_external: 'Anchor is processing your deposit…',
-  completed: 'Deposit complete — funds are in your wallet.',
-};
 
 interface Creator {
   id: number;
@@ -80,10 +47,6 @@ export default function AppHubPage() {
   const [showUsd, setShowUsd] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const [withdrawing, setWithdrawing] = useState(false);
-  const [withdrawStatus, setWithdrawStatus] = useState<string | null>(null);
-  const [depositing, setDepositing] = useState(false);
-  const [depositStatus, setDepositStatus] = useState<string | null>(null);
 
   // Stable across renders so the balance-loading effect below doesn't re-run in
   // a loop (availableAssetCodes returns a fresh array each call).
@@ -193,97 +156,7 @@ export default function AppHubPage() {
     await copyProfile();
   };
 
-  // Kick off the SEP-24 deposit. The interactive popup must open synchronously
-  // inside runDeposit once the anchor returns the URL, so nothing blocking runs
-  // before that on the UI side. Refresh balances afterward.
-  const handleDeposit = async () => {
-    if (!walletAddress) {
-      toast.error('No wallet connected');
-      return;
-    }
-    setDepositing(true);
-    setDepositStatus('config');
-    try {
-      const result = await runDeposit(walletAddress, {
-        onStatus: (phase: string) => setDepositStatus(phase),
-      });
-      if (!result) {
-        toast('Deposit cancelled');
-      } else if (result.status === 'completed') {
-        toast.success(`Deposit complete — ${anchorConfig.assetCode} credited to your wallet.`);
-      } else {
-        toast(`Deposit ended with status: ${result.status}`);
-      }
-    } catch (err) {
-      const description = err instanceof AnchorError ? err.message : (err as Error).message;
-      toast.error('Deposit failed', { description });
-    } finally {
-      setDepositing(false);
-      setDepositStatus(null);
-      loadBalances();
-    }
-  };
-
-  // Persist a completed cash-out to the backend so it shows up in the dashboard's
-  // activity feed. Best-effort: the funds have already moved, so a logging
-  // failure must never surface as a withdrawal error. The endpoint is idempotent
-  // on the anchor tx id, so a retry can't create duplicates.
-  const recordWithdrawal = async (tx: any) => {
-    if (!creator || !token) return;
-    try {
-      await fetch(`${API_URL}/api/withdrawals`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          creatorUsername: creator.username,
-          amountIn: Number(tx.amount_in),
-          amountOut: tx.amount_out != null ? Number(tx.amount_out) : undefined,
-          fee: tx.amount_fee != null ? Number(tx.amount_fee) : undefined,
-          currency: anchorConfig.assetCode,
-          anchorTxId: tx.id,
-          stellarTxId: tx.stellar_transaction_id,
-          status: tx.status,
-        }),
-      });
-    } catch {
-      // Swallow: the withdrawal itself succeeded.
-    }
-  };
-
-  const handleWithdraw = async () => {
-    if (!walletAddress) {
-      toast.error('No wallet connected');
-      return;
-    }
-    setWithdrawing(true);
-    setWithdrawStatus('config');
-    try {
-      const result = await runWithdraw(walletAddress, {
-        onStatus: (phase: string) => setWithdrawStatus(phase),
-      });
-      if (!result) {
-        toast('Withdrawal cancelled');
-      } else if (result.status === 'completed') {
-        toast.success('Withdrawal complete — funds are on their way to your bank.');
-        await recordWithdrawal(result);
-      } else {
-        toast(`Withdrawal ended with status: ${result.status}`);
-      }
-    } catch (err) {
-      const description = err instanceof AnchorError ? err.message : (err as Error).message;
-      toast.error('Withdrawal failed', { description });
-    } finally {
-      setWithdrawing(false);
-      setWithdrawStatus(null);
-      loadBalances();
-    }
-  };
-
   const greetingName = creator?.displayName || creator?.username || 'there';
-  const busy = withdrawing || depositing;
 
   return (
     <ProtectedRoute>
@@ -389,47 +262,18 @@ export default function AppHubPage() {
             </div>
           )}
 
-          {/* Money actions */}
+          {/* Cash out */}
           <div className="card-brutal p-6">
-            <h2 className="text-lg font-extrabold text-ink mb-1">Add funds &amp; cash out</h2>
-            <p className="text-xs text-muted mb-4 font-medium">
-              Move {anchorConfig.assetCode} between your bank and your wallet through{' '}
-              <span className="font-mono">{anchorConfig.homeDomain}</span>.
+            <h2 className="text-lg font-extrabold text-ink mb-1">Cash out</h2>
+            <p className="text-sm text-muted mb-4 font-medium">
+              Convert your USDC to Naira and send it straight to your bank account.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <button
-                  onClick={handleDeposit}
-                  disabled={busy || !walletAddress}
-                  className="btn-brutal btn-brutal-primary w-full"
-                >
-                  {depositing ? 'Adding funds…' : `Add ${anchorConfig.assetCode}`}
-                </button>
-                {depositStatus && (
-                  <p className="text-sm text-ink mt-3 font-medium animate-pulse">
-                    {DEPOSIT_STATUS_LABELS[depositStatus] || depositStatus}
-                  </p>
-                )}
-              </div>
-              <div>
-                <button
-                  onClick={handleWithdraw}
-                  disabled={busy || !walletAddress}
-                  className="btn-brutal btn-brutal-lime w-full"
-                >
-                  {withdrawing ? 'Withdrawing…' : `Cash out ${anchorConfig.assetCode}`}
-                </button>
-                {withdrawStatus && (
-                  <p className="text-sm text-ink mt-3 font-medium animate-pulse">
-                    {WITHDRAW_STATUS_LABELS[withdrawStatus] || withdrawStatus}
-                  </p>
-                )}
-              </div>
-            </div>
-            <p className="text-xs text-muted mt-3 font-medium">
-              Testnet sandbox — moves {anchorConfig.assetCode} against the SDF reference anchor
-              with fake KYC, not real funds.
-            </p>
+            <Link
+              href="/app/withdraw"
+              className="btn-brutal btn-brutal-primary w-full"
+            >
+              Withdraw
+            </Link>
           </div>
         </div>
       </div>
