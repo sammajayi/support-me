@@ -86,7 +86,7 @@ export default function AppHubPage() {
       const next: Balances = {};
       for (const code of assetCodes) {
         const match = account.balances.find(getAsset(code).balanceMatcher);
-        next[code] = match ? parseFloat((match as { balance?: string }).balance || '0').toFixed(4) : null;
+        next[code] = match ? String(Math.round(parseFloat((match as { balance?: string }).balance || '0'))) : null;
       }
       setBalances(next);
     } catch {

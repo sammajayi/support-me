@@ -39,13 +39,13 @@ export default function WithdrawPage() {
     server.loadAccount(walletAddress)
       .then((account) => {
         const native = account.balances.find((b) => b.asset_type === 'native');
-        setXlmBalance(native ? parseFloat((native as any).balance).toFixed(4) : '0.0000');
+        setXlmBalance(native ? Math.round(parseFloat((native as any).balance)).toString() : '0');
 
         if (USDC_ISSUER) {
           const usdc = account.balances.find(
             (b) => (b as any).asset_code === 'USDC' && (b as any).asset_issuer === USDC_ISSUER
           );
-          setUsdcBalance(usdc ? parseFloat((usdc as any).balance).toFixed(4) : null);
+          setUsdcBalance(usdc ? Math.round(parseFloat((usdc as any).balance)).toString() : null);
         }
       })
       .catch(() => {})
@@ -99,7 +99,7 @@ export default function WithdrawPage() {
           </div>
 
           <div className="card-brutal bg-brand-lime/30 p-4 text-sm font-medium text-ink">
-            Demo mode — this simulates a licensed off-ramp. No real bank transfer occurs and no on-chain funds move.
+            Demo mode, this simulates a licensed off-ramp. No real bank transfer occurs and no on-chain funds move.
           </div>
 
           {stage === 'done' ? (

@@ -259,8 +259,8 @@ export default function DashboardPage() {
           <div className="grid md:grid-cols-3 gap-6 mb-8">
             <div className="card-brutal bg-brand-cyan p-6">
               <p className="text-ink text-sm font-bold uppercase tracking-wide">XLM Volume</p>
-              <p className="text-4xl font-extrabold text-ink mt-2 tabular-nums">
-                {xlmVolume.toFixed(2)} <span className="text-2xl">XLM</span>
+              <p className="text-2xl sm:text-3xl font-extrabold text-ink mt-2 tabular-nums">
+                {Math.round(xlmVolume)} <span className="text-xl">XLM</span>
               </p>
               {formatUsd(xlmVolume, 'XLM', prices) && (
                 <p className="text-sm font-bold text-ink/70 mt-1">{formatUsd(xlmVolume, 'XLM', prices)}</p>
@@ -268,8 +268,8 @@ export default function DashboardPage() {
             </div>
             <div className="card-brutal bg-brand-lime p-6">
               <p className="text-ink text-sm font-bold uppercase tracking-wide">USDC Volume</p>
-              <p className="text-4xl font-extrabold text-ink mt-2 tabular-nums">
-                {usdcVolume.toFixed(2)} <span className="text-2xl">USDC</span>
+              <p className="text-2xl sm:text-3xl font-extrabold text-ink mt-2 tabular-nums">
+                {Math.round(usdcVolume)} <span className="text-xl">USDC</span>
               </p>
               {formatUsd(usdcVolume, 'USDC', prices) && (
                 <p className="text-sm font-bold text-ink/70 mt-1">{formatUsd(usdcVolume, 'USDC', prices)}</p>
@@ -282,8 +282,8 @@ export default function DashboardPage() {
               ) : (
                 <div className="mt-2 space-y-1">
                   {Object.entries(withdrawnByCurrency).map(([currency, amount]) => (
-                    <p key={currency} className="text-3xl font-extrabold text-ink tabular-nums">
-                      {amount.toFixed(2)} <span className="text-xl">{currency}</span>
+                    <p key={currency} className="text-2xl sm:text-3xl font-extrabold text-ink tabular-nums">
+                      {Math.round(amount)} <span className="text-xl">{currency}</span>
                     </p>
                   ))}
                 </div>
