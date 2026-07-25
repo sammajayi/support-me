@@ -170,7 +170,7 @@ export default function AdminPage() {
             </div>
             <div className="card-brutal bg-card p-6">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-ink text-sm font-bold uppercase tracking-wide">Total earnings</p>
+                <p className="text-ink text-sm font-bold uppercase tracking-wide">Total Creator earnings</p>
                 {currencies.length > 1 && (
                   <div className="flex border-2 border-ink rounded-lg overflow-hidden shrink-0">
                     {currencies.map((currency) => (
@@ -213,6 +213,7 @@ export default function AdminPage() {
                 <table className="w-full text-left">
                   <thead>
                     <tr className="text-xs font-bold uppercase tracking-wide text-muted border-b-2 border-ink">
+                      <th className="py-2 pr-4">#</th>
                       <th className="py-2 pr-4">Name</th>
                       <th className="py-2 pr-4">Wallet</th>
                       <th className="py-2 pr-4">Joined</th>
@@ -220,8 +221,9 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-ink/10">
-                    {data.users.map((u) => (
+                    {data.users.map((u, i) => (
                       <tr key={u.id} className="text-sm">
+                        <td className="py-2.5 pr-4 text-muted tabular-nums">{i + 1}</td>
                         <td className="py-2.5 pr-4 font-bold text-ink">
                           {u.displayName || u.username || (
                             <span className="text-muted font-medium">No profile</span>
