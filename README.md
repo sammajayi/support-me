@@ -62,25 +62,6 @@ See [`PRD(v3).md`](PRD(v3).md) and [`docs/v3-plan.md`](docs/v3-plan.md) for the 
 - **Multi-Asset Tipping**: Supporters can tip in **USDC** alongside XLM. The `donate` contract already takes a generic token address, so this is resolved entirely client-side ([`frontend/lib/assets.js`](frontend/lib/assets.js)) — set `NEXT_PUBLIC_USDC_ISSUER` to enable the asset selector; without it the UI cleanly falls back to XLM-only.
 - **Neobrutalism Rebrand**: New design system — hard black borders, flat saturated fills, chunky offset shadows, no gradients — driven by reusable primitives (`card-brutal`, `btn-brutal`, `input-brutal`) in [`frontend/app/globals.css`](frontend/app/globals.css).
 
-## What's New (v3)
-
-- **Real-Time Updates**: A backend Soroban event listener polls the `donation` contract for on-chain events and streams them to connected clients over Server-Sent Events (`GET /api/events`) — the dashboard and creator profile pages update live as donations settle, no polling or refresh needed
-- **Centralized Error Handling & Validation**: All backend routes validate request bodies with Zod schemas and share a single error-handling middleware for consistent error responses
-- **Error Boundaries & Loading Skeletons**: A root Next.js error boundary (`app/error.tsx`) handles unexpected render errors with a retry option, and skeleton screens (mirroring each page's real layout) replace generic spinners on the dashboard, settings, and creator profile pages
-- **Test Suites**: Backend tests with Jest + Supertest (routes, middleware, services), frontend tests with Vitest + React Testing Library (components, auth context, dashboard SSE behavior), and Rust unit/integration tests for both Soroban contracts
-- **CI Pipeline**: GitHub Actions runs contract tests + wasm build, backend build/tests, and frontend type-check/tests/build on every push and pull request to `main`
-- **Mobile Responsive Layout**: Improved responsive behavior across all pages
-
-## What's New (v2)
-
-- **Wallet Sign-In**: Connect a Stellar wallet and sign a challenge message to log in (no email/password) — JWT issued after signature verification
-- **Creator Profiles**: Each user creates a unique username (e.g., `https://support-mee.vercel.app/sammajayi`) with a public profile
-- **Dashboard**: Track donations, earnings, and supporter statistics
-- **Multi-Wallet Connection**: Connect Freighter, xBull, Albedo, Rabet, or Lobstr to send or receive tips
-- **On-Chain Donations**: Donations call a deployed Soroban contract that transfers XLM and records the donation on-chain
-- **Dynamic Donations**: Support any creator on the platform through their unique profile URL
-- **Settings Page**: Update profile information and connect/update wallet address
-
 ## Features
 
 - **Wallet-Based Authentication**: Sign in by proving ownership of a Stellar wallet via a signed challenge message (SEP-0043/SEP-0053) — no passwords
@@ -89,8 +70,14 @@ See [`PRD(v3).md`](PRD(v3).md) and [`docs/v3-plan.md`](docs/v3-plan.md) for the 
 - **On-Chain Contract Calls**: Donations are settled and recorded through a deployed Soroban contract
 - **Donation Tracking**: Backend-stored donation history with stats
 - **Creator Dashboard**: Real-time analytics and recent supporter feed, updated live over SSE
+- **Dynamic Donations**: Support any creator on the platform through their unique profile URL
+- **Profile Settings**: Update profile information, display name, bio, and connect/update wallet address
 - **Zero Fees**: 100% of donations go directly to creators
 - **Instant Settlements**: Stellar blockchain ensures fast, secure transactions
+- **Error Boundaries & Loading Skeletons**: Root error boundary with retry and skeleton screens for smooth UX
+- **Test Suites**: Backend (Jest + Supertest), frontend (Vitest + React Testing Library), and Rust contract tests
+- **CI Pipeline**: GitHub Actions runs all tests and builds on every push and pull request
+- **Mobile Responsive Layout**: Optimized for all screen sizes
 
 ## Tech Stack
 
