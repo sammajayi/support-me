@@ -6,6 +6,7 @@ import donationsRouter from "./routes/donations";
 import withdrawalsRouter from "./routes/withdrawals";
 import eventsRouter from "./routes/events";
 import adminRouter from "./routes/admin";
+import activityRouter from "./routes/activity";
 import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
@@ -23,6 +24,7 @@ app.use("/api/donations", donationsRouter);
 app.use("/api/withdrawals", withdrawalsRouter);
 app.use("/api/events", eventsRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/activity", activityRouter);
 
 app.use((req, res) => {
   return res.status(404).json({ error: "Not Found", code: "NOT_FOUND" });
