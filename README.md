@@ -17,7 +17,13 @@ SupportMe is a creator tipping and donation platform. This enables creators on S
 
 ## Mobile Responsive UI
 
-<img src="frontend/public/mobile-responsive.png" alt="SupportMe home page rendered at iPhone mobile viewport (375x812)" width="375" />
+<img src="frontend/public/mobile responsiveness/Screenshot_20260726_111635_Chrome.jpg" alt="Mobile responsive - Home page" width="375" />
+<img src="frontend/public/mobile responsiveness/Screenshot_20260726_111654_Chrome.jpg" alt="Mobile responsive - Dashboard" width="375" />
+<img src="frontend/public/mobile responsiveness/Screenshot_20260726_111721_Chrome.jpg" alt="Mobile responsive - Creator profile" width="375" />
+<img src="frontend/public/mobile responsiveness/Screenshot_20260726_111736_Chrome.jpg" alt="Mobile responsive - Settings" width="375" />
+<img src="frontend/public/mobile responsiveness/Screenshot_20260726_111800_Chrome.jpg" alt="Mobile responsive - Activity" width="375" />
+<img src="frontend/public/mobile responsiveness/Screenshot_20260726_111815_Chrome.jpg" alt="Mobile responsive - Wallet connected" width="375" />
+<img src="frontend/public/mobile responsiveness/Screenshot 2026-07-26 at 14.14.51.png" alt="Mobile responsive - Additional view" width="375" />
 
 ## Smart Contracts (Stellar Testnet)
 
