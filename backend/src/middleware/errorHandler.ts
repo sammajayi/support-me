@@ -1,7 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
-import * as Sentry from "@sentry/node";
 import { AppError } from "../errors/AppError";
 
 /**
@@ -45,6 +44,5 @@ export function errorHandler(
   }
 
   console.error(`Unhandled error on ${req.method} ${req.path}:`, err);
-  Sentry.captureException(err);
   return res.status(500).json({ error: "Internal server error", code: "INTERNAL_ERROR" });
 }
