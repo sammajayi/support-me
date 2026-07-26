@@ -243,7 +243,7 @@ export default function AppHubPage() {
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={copyProfile}
-                    className="btn-brutal btn-brutal-white gap-1.5"
+                    className="btn-brutal btn-brutal-white gap-1.5 text-xs px-3 py-1.5 sm:text-sm sm:px-6 sm:py-3"
                     aria-label="Copy profile link"
                   >
                     <HugeiconsIcon icon={Copy01Icon} size={18} strokeWidth={2} />
@@ -251,7 +251,7 @@ export default function AppHubPage() {
                   </button>
                   <button
                     onClick={shareProfile}
-                    className="btn-brutal btn-brutal-primary gap-1.5"
+                    className="btn-brutal btn-brutal-primary gap-1.5 text-xs px-3 py-1.5 sm:text-sm sm:px-6 sm:py-3"
                     aria-label="Share profile"
                   >
                     <HugeiconsIcon icon={Share08Icon} size={18} strokeWidth={2} />

@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import * as Sentry from "@sentry/node";
 import authRouter from "./routes/auth";
 import creatorsRouter from "./routes/creators";
 import donationsRouter from "./routes/donations";
@@ -29,6 +30,8 @@ app.use("/api/activity", activityRouter);
 app.use((req, res) => {
   return res.status(404).json({ error: "Not Found", code: "NOT_FOUND" });
 });
+
+Sentry.setupExpressErrorHandler(app);
 
 app.use(errorHandler);
 
