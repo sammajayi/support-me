@@ -25,3 +25,19 @@ pub struct CreatorProfile {
     pub donation_count: u32,
     pub created_at: u64,
 }
+
+/// A recurring donation. The supporter grants the donation contract a SAC
+/// allowance (via the token contract's own `approve`) covering `amount` per
+/// `interval_secs`; the donation contract then draws on that allowance via
+/// `transfer_from` once per interval, on or after `next_charge_at`.
+#[derive(Clone)]
+#[contracttype]
+pub struct Subscription {
+    pub supporter: Address,
+    pub creator: Address,
+    pub token: Address,
+    pub amount: i128,
+    pub interval_secs: u64,
+    pub next_charge_at: u64,
+    pub active: bool,
+}

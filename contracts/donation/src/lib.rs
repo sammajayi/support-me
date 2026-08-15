@@ -7,7 +7,7 @@
 //! calls (`env.invoke_contract`), so the two contracts can be deployed,
 //! upgraded, and audited independently.
 
-use common::{CreatorProfile, DonationRecord};
+use common::{CreatorProfile, DonationRecord, Subscription};
 use soroban_sdk::{
     contract, contractevent, contractimpl, symbol_short, token, Address, Env, IntoVal, Symbol,
     Val, Vec as SorobanVec, String,
@@ -17,6 +17,9 @@ const DONATIONS_KEY: Symbol = symbol_short!("donations");
 const DONATION_COUNTER: Symbol = symbol_short!("counter");
 const ADMIN_KEY: Symbol = symbol_short!("admin");
 const REGISTRY_KEY: Symbol = symbol_short!("registry");
+const SUBSCRIPTIONS_KEY: Symbol = symbol_short!("subs");
+const SUB_COUNTER: Symbol = symbol_short!("sub_ctr");
+const EXECUTOR_KEY: Symbol = symbol_short!("executor");
 
 /// Emitted whenever a donation is settled on-chain. `donor` and `creator`
 /// are indexed as topics so downstream systems (e.g. the backend's event
@@ -32,6 +35,28 @@ pub struct DonatedEvent {
     pub amount: i128,
     pub memo: String,
     pub timestamp: u64,
+}
+
+/// Emitted when a supporter starts a recurring donation.
+#[contractevent(topics = ["subscribed"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SubscribedEvent {
+    #[topic]
+    pub supporter: Address,
+    #[topic]
+    pub creator: Address,
+    pub subscription_id: u64,
+    pub amount: i128,
+    pub interval_secs: u64,
+}
+
+/// Emitted when a supporter cancels a recurring donation.
+#[contractevent(topics = ["sub_cancelled"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SubscriptionCancelledEvent {
+    #[topic]
+    pub supporter: Address,
+    pub subscription_id: u64,
 }
 
 #[contract]
@@ -127,6 +152,191 @@ impl DonationContract {
         .publish(&env);
 
         donation
+    }
+
+    /// Admin-gated: sets (or rotates) the backend-held address permitted to
+    /// trigger `charge_subscription`. This address pays each charge's
+    /// transaction fee but never custodies donor funds itself —
+    /// `transfer_from`'s `to` is always the subscription's stored creator,
+    /// so a compromised executor key can at most accelerate/replay already
+    /// approved charges, not redirect funds.
+    pub fn set_executor(env: Env, executor: Address) {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&ADMIN_KEY)
+            .expect("donation contract not initialized: call initialize() first");
+        admin.require_auth();
+        env.storage().instance().set(&EXECUTOR_KEY, &executor);
+    }
+
+    /// Starts a recurring donation. `supporter` must separately grant this
+    /// contract a SAC allowance on `token` (via the token contract's own
+    /// `approve`) covering at least `amount` per interval — `subscribe`
+    /// only records the schedule, it does not touch funds.
+    pub fn subscribe(
+        env: Env,
+        supporter: Address,
+        creator: Address,
+        token: Address,
+        amount: i128,
+        interval_secs: u64,
+    ) -> u64 {
+        supporter.require_auth();
+        assert!(amount > 0, "Subscription amount must be positive");
+        assert!(interval_secs > 0, "Interval must be positive");
+
+        let id: u64 = env.storage().persistent().get(&SUB_COUNTER).unwrap_or(0);
+        let now = env.ledger().timestamp();
+
+        let subscription = Subscription {
+            supporter: supporter.clone(),
+            creator: creator.clone(),
+            token,
+            amount,
+            interval_secs,
+            next_charge_at: now + interval_secs,
+            active: true,
+        };
+
+        env.storage()
+            .persistent()
+            .set(&(SUBSCRIPTIONS_KEY, id), &subscription);
+        env.storage().persistent().set(&SUB_COUNTER, &(id + 1));
+
+        SubscribedEvent {
+            supporter,
+            creator,
+            subscription_id: id,
+            amount,
+            interval_secs,
+        }
+        .publish(&env);
+
+        id
+    }
+
+    /// Executes one due charge of a subscription by drawing on the SAC
+    /// allowance the supporter granted this contract, then records and
+    /// reports it exactly like a one-off `donate`. Callable only by the
+    /// authorized executor (see `set_executor`).
+    pub fn charge_subscription(env: Env, executor: Address, subscription_id: u64) -> DonationRecord {
+        executor.require_auth();
+        let authorized_executor: Address = env
+            .storage()
+            .instance()
+            .get(&EXECUTOR_KEY)
+            .expect("executor not set: call set_executor() first");
+        assert_eq!(
+            executor, authorized_executor,
+            "caller is not the authorized executor"
+        );
+
+        let mut subscription: Subscription = env
+            .storage()
+            .persistent()
+            .get(&(SUBSCRIPTIONS_KEY, subscription_id))
+            .expect("subscription not found");
+        assert!(subscription.active, "subscription is not active");
+
+        let now = env.ledger().timestamp();
+        assert!(now >= subscription.next_charge_at, "subscription not yet due");
+
+        // Draw on the allowance: this contract is the `spender`, authorized
+        // implicitly since it is the direct invoker (same trick used below
+        // to call the registry as our own contract identity).
+        let token_client = token::Client::new(&env, &subscription.token);
+        token_client.transfer_from(
+            &env.current_contract_address(),
+            &subscription.supporter,
+            &subscription.creator,
+            &subscription.amount,
+        );
+
+        let registry = Self::registry_address(&env);
+        let record_args: SorobanVec<Val> = (
+            env.current_contract_address(),
+            subscription.creator.clone(),
+            subscription.amount,
+        )
+            .into_val(&env);
+        let (): () =
+            env.invoke_contract(&registry, &Symbol::new(&env, "record_donation"), record_args);
+
+        let memo = String::from_str(&env, "recurring");
+        let donation = DonationRecord {
+            donor: subscription.supporter.clone(),
+            creator: subscription.creator.clone(),
+            amount: subscription.amount,
+            memo: memo.clone(),
+            timestamp: now,
+        };
+
+        let counter: u32 = env
+            .storage()
+            .persistent()
+            .get(&DONATION_COUNTER)
+            .unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&(DONATIONS_KEY, counter), &donation);
+        env.storage()
+            .persistent()
+            .set(&DONATION_COUNTER, &(counter + 1));
+
+        subscription.next_charge_at = now + subscription.interval_secs;
+        env.storage()
+            .persistent()
+            .set(&(SUBSCRIPTIONS_KEY, subscription_id), &subscription);
+
+        DonatedEvent {
+            donor: subscription.supporter.clone(),
+            creator: subscription.creator.clone(),
+            amount: subscription.amount,
+            memo,
+            timestamp: now,
+        }
+        .publish(&env);
+
+        donation
+    }
+
+    /// Cancels a subscription and, in the same transaction, zeroes the
+    /// remaining on-chain allowance so the supporter doesn't need a second
+    /// signature to fully revoke it. Must be signed by the supporter.
+    pub fn cancel_subscription(env: Env, supporter: Address, subscription_id: u64) {
+        supporter.require_auth();
+
+        let mut subscription: Subscription = env
+            .storage()
+            .persistent()
+            .get(&(SUBSCRIPTIONS_KEY, subscription_id))
+            .expect("subscription not found");
+        assert_eq!(
+            subscription.supporter, supporter,
+            "not the subscription owner"
+        );
+
+        subscription.active = false;
+        env.storage()
+            .persistent()
+            .set(&(SUBSCRIPTIONS_KEY, subscription_id), &subscription);
+
+        let token_client = token::Client::new(&env, &subscription.token);
+        token_client.approve(&supporter, &env.current_contract_address(), &0, &0);
+
+        SubscriptionCancelledEvent {
+            supporter,
+            subscription_id,
+        }
+        .publish(&env);
+    }
+
+    /// Fetch a subscription by its counter-based id.
+    pub fn get_subscription(env: Env, subscription_id: u64) -> Option<Subscription> {
+        env.storage()
+            .persistent()
+            .get(&(SUBSCRIPTIONS_KEY, subscription_id))
     }
 
     /// Get all donations count (approximate, stored in counter)
@@ -321,5 +531,156 @@ mod tests {
         assert_eq!(donation_client.get_total_donations_count(), 2);
         assert_eq!(donation_client.get_donation(&0).unwrap().amount, 100);
         assert_eq!(donation_client.get_donation(&1).unwrap().amount, 200);
+    }
+
+    #[test]
+    fn test_subscribe_records_schedule() {
+        let env = Env::default();
+        env.mock_all_auths_allowing_non_root_auth();
+        let (admin, donation_client, _registry_client) = setup(&env);
+
+        let supporter = Address::generate(&env);
+        let creator = Address::generate(&env);
+        let token_address = create_token_contract(&env, &admin);
+
+        env.ledger().with_mut(|li| li.timestamp = 1_000);
+
+        let id = donation_client.subscribe(&supporter, &creator, &token_address, &100, &2_592_000);
+        let subscription = donation_client.get_subscription(&id).unwrap();
+
+        assert_eq!(subscription.supporter, supporter);
+        assert_eq!(subscription.creator, creator);
+        assert_eq!(subscription.amount, 100);
+        assert_eq!(subscription.interval_secs, 2_592_000);
+        assert_eq!(subscription.next_charge_at, 1_000 + 2_592_000);
+        assert!(subscription.active);
+    }
+
+    #[test]
+    fn test_charge_subscription_draws_allowance_and_updates_registry() {
+        let env = Env::default();
+        env.mock_all_auths_allowing_non_root_auth();
+        let (admin, donation_client, registry_client) = setup(&env);
+
+        let supporter = Address::generate(&env);
+        let creator = Address::generate(&env);
+        let executor = Address::generate(&env);
+        let token_address = create_token_contract(&env, &admin);
+        StellarAssetClient::new(&env, &token_address).mint(&supporter, &10_000);
+
+        env.ledger().with_mut(|li| li.timestamp = 1_000);
+
+        donation_client.set_executor(&executor);
+        let id = donation_client.subscribe(&supporter, &creator, &token_address, &500, &1_000);
+
+        let token_client = token::Client::new(&env, &token_address);
+        token_client.approve(&supporter, &donation_client.address, &500, &1_000);
+
+        env.ledger().with_mut(|li| li.timestamp = 2_000);
+        let donation = donation_client.charge_subscription(&executor, &id);
+
+        assert_eq!(donation.amount, 500);
+        assert_eq!(donation.donor, supporter);
+        assert_eq!(token_client.balance(&creator), 500);
+        assert_eq!(token_client.balance(&supporter), 9_500);
+
+        let stats = registry_client.get_creator(&creator).unwrap();
+        assert_eq!(stats.total_donations, 500);
+        assert_eq!(stats.donation_count, 1);
+
+        let subscription = donation_client.get_subscription(&id).unwrap();
+        assert_eq!(subscription.next_charge_at, 2_000 + 1_000);
+    }
+
+    #[test]
+    #[should_panic(expected = "caller is not the authorized executor")]
+    fn test_charge_subscription_rejects_unauthorized_executor() {
+        let env = Env::default();
+        env.mock_all_auths_allowing_non_root_auth();
+        let (admin, donation_client, _registry_client) = setup(&env);
+
+        let supporter = Address::generate(&env);
+        let creator = Address::generate(&env);
+        let executor = Address::generate(&env);
+        let impostor = Address::generate(&env);
+        let token_address = create_token_contract(&env, &admin);
+
+        donation_client.set_executor(&executor);
+        let id = donation_client.subscribe(&supporter, &creator, &token_address, &500, &1_000);
+
+        donation_client.charge_subscription(&impostor, &id);
+    }
+
+    #[test]
+    #[should_panic(expected = "subscription not yet due")]
+    fn test_charge_subscription_rejects_before_due() {
+        let env = Env::default();
+        env.mock_all_auths_allowing_non_root_auth();
+        let (admin, donation_client, _registry_client) = setup(&env);
+
+        let supporter = Address::generate(&env);
+        let creator = Address::generate(&env);
+        let executor = Address::generate(&env);
+        let token_address = create_token_contract(&env, &admin);
+        StellarAssetClient::new(&env, &token_address).mint(&supporter, &10_000);
+
+        env.ledger().with_mut(|li| li.timestamp = 1_000);
+        donation_client.set_executor(&executor);
+        let id = donation_client.subscribe(&supporter, &creator, &token_address, &500, &1_000);
+
+        let token_client = token::Client::new(&env, &token_address);
+        token_client.approve(&supporter, &donation_client.address, &500, &1_000);
+
+        // Still at timestamp 1_000, next_charge_at is 2_000 — too early.
+        donation_client.charge_subscription(&executor, &id);
+    }
+
+    #[test]
+    fn test_cancel_subscription_deactivates_and_revokes_allowance() {
+        let env = Env::default();
+        env.mock_all_auths_allowing_non_root_auth();
+        let (admin, donation_client, _registry_client) = setup(&env);
+
+        let supporter = Address::generate(&env);
+        let creator = Address::generate(&env);
+        let token_address = create_token_contract(&env, &admin);
+
+        env.ledger().with_mut(|li| li.timestamp = 1_000);
+        let id = donation_client.subscribe(&supporter, &creator, &token_address, &500, &1_000);
+
+        let token_client = token::Client::new(&env, &token_address);
+        token_client.approve(&supporter, &donation_client.address, &500, &1_000);
+        assert_eq!(token_client.allowance(&supporter, &donation_client.address), 500);
+
+        donation_client.cancel_subscription(&supporter, &id);
+
+        assert!(!donation_client.get_subscription(&id).unwrap().active);
+        assert_eq!(token_client.allowance(&supporter, &donation_client.address), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "subscription is not active")]
+    fn test_charge_subscription_rejects_cancelled() {
+        let env = Env::default();
+        env.mock_all_auths_allowing_non_root_auth();
+        let (admin, donation_client, _registry_client) = setup(&env);
+
+        let supporter = Address::generate(&env);
+        let creator = Address::generate(&env);
+        let executor = Address::generate(&env);
+        let token_address = create_token_contract(&env, &admin);
+        StellarAssetClient::new(&env, &token_address).mint(&supporter, &10_000);
+
+        env.ledger().with_mut(|li| li.timestamp = 1_000);
+        donation_client.set_executor(&executor);
+        let id = donation_client.subscribe(&supporter, &creator, &token_address, &500, &1_000);
+
+        let token_client = token::Client::new(&env, &token_address);
+        token_client.approve(&supporter, &donation_client.address, &500, &1_000);
+
+        donation_client.cancel_subscription(&supporter, &id);
+
+        env.ledger().with_mut(|li| li.timestamp = 2_000);
+        donation_client.charge_subscription(&executor, &id);
     }
 }
