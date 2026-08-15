@@ -7,12 +7,18 @@ import { toast } from 'sonner';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { PartyIcon } from '@hugeicons/core-free-icons';
 import { connectWallet } from '@/lib/wallet';
-import { sendDonation, DonationError } from '@/lib/contract';
+import { sendDonation, approveAllowance, subscribe, DonationError } from '@/lib/contract';
 import { availableAssetCodes, getAsset } from '@/lib/assets';
 import { getPlatform } from '@/lib/socials';
 import { API_URL } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 import { Skeleton } from '@/components/Skeleton';
 import { TipJarLoader } from '@/components/TipJarLoader';
+
+const INTERVAL_PRESETS = [
+  { label: 'Weekly', days: 7 },
+  { label: 'Monthly', days: 30 },
+];
 
 const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const server = new StellarSdk.Horizon.Server(HORIZON_URL);
@@ -51,6 +57,7 @@ interface Donation {
 
 export default function CreatorProfilePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = use(params);
+  const { token, loginWithWallet } = useAuth();
   const [creator, setCreator] = useState<Creator | null>(null);
   const [donations, setDonations] = useState<Donation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +72,10 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
   const [assetCode, setAssetCode] = useState('XLM');
   const [sending, setSending] = useState(false);
   const [txStatus, setTxStatus] = useState<string | null>(null);
+
+  const [recurring, setRecurring] = useState(false);
+  const [intervalDays, setIntervalDays] = useState('30');
+  const [subscribeStep, setSubscribeStep] = useState<string | null>(null);
 
   const presets = ['1', '5', '10', '20'];
 
@@ -251,6 +262,89 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
     }
   };
 
+  const handleStartSubscription = async () => {
+    if (!creator?.walletAddress) return;
+
+    const intervalSecs = Math.round(parseFloat(intervalDays) * 86400);
+    if (!intervalSecs || intervalSecs <= 0) {
+      toast.error('Enter a valid interval in days');
+      return;
+    }
+
+    setSending(true);
+    try {
+      let address = userAddress;
+      if (!address) {
+        address = await connectWallet();
+        setUserAddress(address);
+      }
+
+      // Recording a subscription (so the supporter can later see/cancel it)
+      // requires a site sign-in, on top of connecting the wallet for signing
+      // transactions — the on-chain subscribe() call itself only needs the
+      // wallet connection.
+      let authToken = token;
+      if (!authToken) {
+        setSubscribeStep('Signing in…');
+        const result = await loginWithWallet();
+        authToken = result.token;
+      }
+
+      setSubscribeStep('Step 1/2: approving allowance…');
+      await approveAllowance({
+        supporterAddress: address,
+        amount: donationAmount,
+        assetCode,
+        intervalSecs,
+        onStatus: setTxStatus,
+      });
+
+      setSubscribeStep('Step 2/2: starting subscription…');
+      const { hash, subscriptionId } = await subscribe({
+        supporterAddress: address,
+        creatorAddress: creator.walletAddress,
+        amount: donationAmount,
+        assetCode,
+        intervalSecs,
+        onStatus: setTxStatus,
+      });
+
+      await fetch(`${API_URL}/api/subscriptions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({
+          creatorUsername: creator.username,
+          supporterAddress: address,
+          token: assetCode,
+          amount: parseFloat(donationAmount),
+          intervalSecs,
+          onChainId: subscriptionId,
+          subscribeTxHash: hash,
+        }),
+      });
+
+      toast.success('Recurring donation started!', {
+        description: `You'll be charged ${donationAmount} ${assetCode} every ${intervalDays} day(s).`,
+      });
+      setRecurring(false);
+    } catch (err) {
+      if (err instanceof DonationError) {
+        const titles: Record<string, string> = {
+          wallet: 'Wallet error',
+          simulation: 'Transaction rejected',
+          network: 'Network error',
+        };
+        toast.error(titles[err.type] || 'Could not start subscription', { description: err.message });
+      } else {
+        toast.error('Could not start subscription', { description: (err as Error).message });
+      }
+    } finally {
+      setSending(false);
+      setTxStatus(null);
+      setSubscribeStep(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background py-10 px-4">
@@ -364,6 +458,9 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
           {sending ? (
             <div className="py-2">
               <TipJarLoader fullScreen={false} />
+              {subscribeStep && (
+                <p className="text-sm text-ink text-center font-bold mt-2">{subscribeStep}</p>
+              )}
               {txStatus && STATUS_LABELS[txStatus] && (
                 <p className="text-sm text-ink text-center animate-pulse font-bold mt-2">
                   {STATUS_LABELS[txStatus]}
@@ -450,12 +547,56 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
                 <p className="text-xs text-muted mt-1 font-medium">{donationMessage.length}/28</p>
               </div>
 
+              <label className="flex items-center gap-2 text-sm font-bold text-ink">
+                <input
+                  type="checkbox"
+                  checked={recurring}
+                  onChange={(e) => setRecurring(e.target.checked)}
+                  className="h-4 w-4 accent-primary"
+                />
+                Make it recurring
+              </label>
+
+              {recurring && (
+                <div className="card-brutal bg-accent-bg p-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    {INTERVAL_PRESETS.map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setIntervalDays(String(preset.days))}
+                        className={`btn-brutal text-sm px-0 py-2 ${
+                          intervalDays === String(preset.days) ? 'btn-brutal-primary' : 'btn-brutal-white'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-ink mb-1">Every N days</label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={intervalDays}
+                      onChange={(e) => setIntervalDays(e.target.value)}
+                      className="input-brutal"
+                    />
+                  </div>
+                  <p className="text-xs text-ink/70 font-medium">
+                    You&apos;ll approve two transactions: one granting an allowance, one starting the
+                    subscription. You can cancel anytime from your Subscriptions page.
+                  </p>
+                </div>
+              )}
+
               <button
-                onClick={handleSendDonation}
+                onClick={recurring ? handleStartSubscription : handleSendDonation}
                 disabled={sending || !creator.walletAddress}
                 className="btn-brutal btn-brutal-lime w-full"
               >
-                Send Donation
+                {recurring ? 'Start Recurring Donation' : 'Send Donation'}
               </button>
             </div>
           )}
