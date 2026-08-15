@@ -68,6 +68,10 @@ See [`PRD(v3).md`](PRD(v3).md) and [`docs/v3-plan.md`](docs/v3-plan.md) for the 
 - **Multi-Asset Tipping**: Supporters can tip in **USDC** alongside XLM. The `donate` contract already takes a generic token address, so this is resolved entirely client-side ([`frontend/lib/assets.js`](frontend/lib/assets.js)) — set `NEXT_PUBLIC_USDC_ISSUER` to enable the asset selector; without it the UI cleanly falls back to XLM-only.
 - **Neobrutalism Rebrand**: New design system — hard black borders, flat saturated fills, chunky offset shadows, no gradients — driven by reusable primitives (`card-brutal`, `btn-brutal`, `input-brutal`) in [`frontend/app/globals.css`](frontend/app/globals.css).
 
+## What's New (v5) — Recurring Donations
+
+- **Recurring Donations**: Supporters can subscribe to auto-donate to a creator on a schedule they choose (weekly, monthly, or any custom number of days), from the same donate form on `/[username]`. On-chain, the supporter grants the `donation` contract a standard SAC allowance (`approve`, sized for ~12 charges by default) and calls the new `subscribe` entrypoint to record the schedule; a backend-held "executor" keypair then calls `charge_subscription` once per interval, drawing on that allowance via `transfer_from` — no further wallet interaction needed from the supporter until they cancel. The executor never custodies donor funds (`transfer_from`'s `to` is pinned to the subscription's stored creator inside the contract), so a leaked executor key can at most accelerate/replay already-approved charges, not redirect them. Supporters manage and cancel their subscriptions from `/app/subscriptions`; cancelling revokes the remaining on-chain allowance in the same transaction. See [`contracts/donation/src/lib.rs`](contracts/donation/src/lib.rs), [`backend/src/services/subscriptionExecutor.ts`](backend/src/services/subscriptionExecutor.ts), and [`frontend/lib/contract.js`](frontend/lib/contract.js). **Not live on the deployed demo yet** — it needs the `donation` contract redeployed (its address will be added to the table above once that happens, alongside the current one) and a funded executor keypair set up; see `EXECUTOR_SECRET_KEY` in [`backend/.env.example`](backend/.env.example) for the steps.
+
 ## Features
 
 - **Wallet-Based Authentication**: Sign in by proving ownership of a Stellar wallet via a signed challenge message (SEP-0043/SEP-0053) — no passwords
@@ -77,6 +81,7 @@ See [`PRD(v3).md`](PRD(v3).md) and [`docs/v3-plan.md`](docs/v3-plan.md) for the 
 - **Donation Tracking**: Backend-stored donation history with stats
 - **Creator Dashboard**: Real-time analytics and recent supporter feed, updated live over SSE
 - **Dynamic Donations**: Support any creator on the platform through their unique profile URL
+- **Recurring Donations**: Supporters can subscribe to auto-donate on a weekly/monthly/custom schedule; see "What's New (v5)" above
 - **Profile Settings**: Update profile information, display name, bio, and connect/update wallet address
 - **Zero Fees**: 100% of donations go directly to creators
 - **Instant Settlements**: Stellar blockchain ensures fast, secure transactions
@@ -292,6 +297,14 @@ Frontend will run on `http://localhost:3000`
 - `POST /api/donations` - Record a donation
   - Body: `{ creatorUsername, senderAddress, amount, message, transactionHash }`
 
+### Subscriptions (recurring donations)
+
+- `GET /api/subscriptions` - List subscriptions (query: `creatorUsername`, `supporterAddress`)
+- `POST /api/subscriptions` - Record a subscription the caller already started on-chain (requires auth; caller's wallet must match `supporterAddress`)
+  - Body: `{ creatorUsername, supporterAddress, token, amount, intervalSecs, onChainId, subscribeTxHash }`
+  - Idempotent on `onChainId` (globally unique, assigned by the donation contract)
+- `POST /api/subscriptions/:id/cancel` - Mark a subscription cancelled after the caller cancelled it on-chain (requires auth, owner only)
+
 ### Real-Time Events
 
 - `GET /api/events` - Server-Sent Events stream of on-chain donations. The
@@ -308,6 +321,7 @@ Frontend will run on `http://localhost:3000`
 - `/dashboard` - Creator dashboard (protected)
 - `/settings` - Profile and wallet settings (protected)
 - `/[username]` - Public creator profile
+- `/app/subscriptions` - Manage and cancel your recurring donations (protected)
 - `/donate` - Redirects to home (legacy route)
 
 ## Environment Variables
@@ -326,6 +340,13 @@ NEXT_PUBLIC_DONATION_CONTRACT_ID=CD6T563YCSYQHDMXC7VCFTKMWMXWHFHAU4NO7EAMFK57QLF
 # SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
 # SOROBAN_EVENTS_POLL_INTERVAL_MS=5000
 # SOROBAN_EVENTS_LOOKBACK_LEDGERS=100
+
+# Optional: enables the SubscriptionExecutor that auto-charges due recurring
+# donations. Without this set, the backend logs a warning and skips
+# charging — subscriptions can still be created/cancelled, they just won't
+# auto-charge. See "What's New (v5)" above for setup steps.
+# EXECUTOR_SECRET_KEY=S...
+# SUBSCRIPTION_EXECUTOR_POLL_INTERVAL_MS=60000
 ```
 
 ### Frontend (.env.local)
@@ -400,6 +421,14 @@ createdAt, updatedAt
 ```
 id, creatorId (foreign key), senderAddress, amount (Float),
 currency (default: "XLM"), message, transactionHash, createdAt
+```
+
+### Subscription
+```
+id, creatorId (foreign key), supporterAddress, token, amount (Float),
+intervalSecs, onChainId (unique), subscribeTxHash, nextChargeAt,
+active (default: true), lastChargeTxHash, lastChargedAt, lastError,
+createdAt, updatedAt
 ```
 
 ## Testing
