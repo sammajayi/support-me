@@ -32,6 +32,7 @@ model Creator {
   updatedAt     DateTime     @updatedAt
   donations     Donation[]
   withdrawals   Withdrawal[]
+  subscriptions Subscription[]
 }
 
 model Donation {
@@ -62,4 +63,26 @@ model Withdrawal {
   // A given anchor transaction maps to exactly one withdrawal record. Lets the
   // POST handler be idempotent when the completion path fires more than once.
   @@unique([creatorId, anchorTxId])
+}
+
+model Subscription {
+  id               Int       @id @default(autoincrement())
+  creator          Creator   @relation(fields: [creatorId], references: [id])
+  creatorId        Int
+  supporterAddress String
+  token            String // asset code, e.g. "XLM" or "USDC"
+  amount           Float // amount charged per interval
+  intervalSecs     Int
+  onChainId        Int       @unique // subscription_id returned by the donation contract's subscribe()
+  subscribeTxHash  String?
+  nextChargeAt     DateTime
+  active           Boolean   @default(true)
+  lastChargeTxHash String?
+  lastChargedAt    DateTime?
+  // Set by the executor when a charge attempt fails (e.g. revoked allowance)
+  // and cleared on the next successful charge, so failures are visible
+  // without the executor retrying forever on its own.
+  lastError        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
