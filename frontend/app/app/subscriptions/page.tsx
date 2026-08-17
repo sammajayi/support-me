@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -12,6 +13,7 @@ import { API_URL } from '@/lib/api';
 interface Subscription {
   id: number;
   creatorId: number;
+  creator: { username: string; displayName: string | null; avatarUrl: string | null };
   supporterAddress: string;
   token: string;
   amount: number;
@@ -105,9 +107,15 @@ function SubscriptionsList() {
             {subscriptions.map((subscription) => (
               <div key={subscription.id} className="card-brutal p-4 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-extrabold text-ink truncate">
+                  <Link
+                    href={`/${subscription.creator.username}`}
+                    className="font-extrabold text-ink hover:text-primary truncate block"
+                  >
+                    {subscription.creator.displayName || subscription.creator.username}
+                  </Link>
+                  <p className="text-sm text-muted font-medium truncate">
                     {subscription.amount} {subscription.token}{' '}
-                    <span className="text-muted font-medium">· {formatInterval(subscription.intervalSecs)}</span>
+                    <span>· {formatInterval(subscription.intervalSecs)}</span>
                   </p>
                   <p className="text-xs text-muted font-medium mt-0.5">
                     {subscription.active

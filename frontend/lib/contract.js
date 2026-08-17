@@ -25,6 +25,23 @@ export class DonationError extends Error {
 }
 
 /**
+ * Converts a whole-unit amount (e.g. "5.5") to stroops (1e7 per unit),
+ * throwing a typed DonationError instead of producing NaN/Infinity that
+ * later blows up as an opaque "Cannot convert NaN to a BigInt" from BigInt().
+ *
+ * @param {string|number} amount
+ * @param {number} [multiplier] extra factor, e.g. periodsToApprove
+ * @returns {bigint}
+ */
+function toStroops(amount, multiplier = 1) {
+  const value = parseFloat(amount);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new DonationError('simulation', 'Enter a valid amount greater than 0.');
+  }
+  return BigInt(Math.round(value * multiplier * 1e7));
+}
+
+/**
  * Shared build → simulate → sign → submit → poll pipeline for a single
  * contract invocation, used by every function below. Centralizes the
  * status-callback stages and error typing so `sendDonation`, `subscribe`,
@@ -167,7 +184,7 @@ export async function sendDonation({ donorAddress, creatorAddress, amount, asset
   } catch (err) {
     throw new DonationError('simulation', err.message, err);
   }
-  const amountStroops = BigInt(Math.round(parseFloat(amount) * 1e7));
+  const amountStroops = toStroops(amount);
 
   const { hash } = await callContract({
     method: 'donate',
@@ -231,7 +248,7 @@ export async function approveAllowance({
 
   const expirationLedger =
     latestLedger + Math.ceil((intervalSecs * periodsToApprove) / APPROX_SECONDS_PER_LEDGER);
-  const amountStroops = BigInt(Math.round(parseFloat(amount) * periodsToApprove * 1e7));
+  const amountStroops = toStroops(amount, periodsToApprove);
 
   const { hash } = await callContract({
     contractId: tokenId,
@@ -278,7 +295,7 @@ export async function subscribe({
   } catch (err) {
     throw new DonationError('simulation', err.message, err);
   }
-  const amountStroops = BigInt(Math.round(parseFloat(amount) * 1e7));
+  const amountStroops = toStroops(amount);
 
   const { hash, returnValue } = await callContract({
     method: 'subscribe',

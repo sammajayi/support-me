@@ -40,6 +40,9 @@ describe("GET /api/subscriptions", () => {
     expect(mockedPrisma.subscription.findMany).toHaveBeenCalledWith({
       orderBy: { createdAt: "desc" },
       where: {},
+      include: {
+        creator: { select: { username: true, displayName: true, avatarUrl: true } },
+      },
     });
   });
 
@@ -51,6 +54,9 @@ describe("GET /api/subscriptions", () => {
     expect(mockedPrisma.subscription.findMany).toHaveBeenCalledWith({
       orderBy: { createdAt: "desc" },
       where: { supporterAddress: "GSUPPORTER" },
+      include: {
+        creator: { select: { username: true, displayName: true, avatarUrl: true } },
+      },
     });
   });
 });

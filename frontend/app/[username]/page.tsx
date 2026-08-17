@@ -211,7 +211,7 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
 
       // Record the donation, tagging it with the asset that was sent so the
       // dashboard can split XLM vs USDC volume.
-      await fetch(`${API_URL}/api/donations`, {
+      const recordRes = await fetch(`${API_URL}/api/donations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -226,19 +226,31 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
 
       setBalance(await loadAssetBalance(userAddress, assetCode));
 
+      const txLink = (
+        <a
+          href={`https://stellar.expert/explorer/testnet/tx/${hash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline"
+        >
+          {hash.slice(0, 16)}…
+        </a>
+      );
+
       toast.success('Donation sent successfully!', {
         icon: <HugeiconsIcon icon={PartyIcon} size={18} strokeWidth={1.5} />,
-        description: (
-          <a
-            href={`https://stellar.expert/explorer/testnet/tx/${hash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            {hash.slice(0, 16)}…
-          </a>
-        ),
+        description: txLink,
       });
+
+      // The on-chain transfer already happened; a failure here only means our
+      // own records (dashboard totals, goal progress) missed it, not that the
+      // donation itself failed — so it gets a separate, non-error toast.
+      if (!recordRes.ok) {
+        toast.warning("Donation sent, but we couldn't record it", {
+          description: <>Keep this for reference: {txLink}</>,
+        });
+      }
+
       setDonationAmount('5');
       setDonationMessage('');
     } catch (err) {
@@ -308,7 +320,7 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
         onStatus: setTxStatus,
       });
 
-      await fetch(`${API_URL}/api/subscriptions`, {
+      const recordRes = await fetch(`${API_URL}/api/subscriptions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
         body: JSON.stringify({
@@ -325,7 +337,21 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
       toast.success('Recurring donation started!', {
         description: `You'll be charged ${donationAmount} ${assetCode} every ${intervalDays} day(s).`,
       });
+
+      // The on-chain subscribe() already succeeded; if this recording call
+      // fails, the subscription won't show up under Subscriptions and won't
+      // be auto-charged, so the supporter needs to know to follow up.
+      if (!recordRes.ok) {
+        toast.warning("We couldn't save this subscription", {
+          description:
+            "It won't appear under Subscriptions or be charged automatically. Contact support with this transaction: " +
+            hash.slice(0, 16) + '…',
+        });
+      }
+
       setRecurring(false);
+      setDonationAmount('5');
+      setDonationMessage('');
     } catch (err) {
       if (err instanceof DonationError) {
         const titles: Record<string, string> = {
@@ -452,7 +478,15 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
 
         {/* Donation card */}
         <div className="card-brutal p-6">
-          <h2 className="text-lg font-extrabold text-ink mb-4">Support {displayName}</h2>
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <h2 className="text-lg font-extrabold text-ink">Support {displayName}</h2>
+            <span
+              className="text-[10px] font-extrabold uppercase tracking-wide text-ink/60 border-2 border-ink/30 rounded px-1.5 py-0.5"
+              title="This app runs on Stellar Testnet — no real funds are used."
+            >
+              Testnet
+            </span>
+          </div>
 
           {sending ? (
             <div className="py-2">
@@ -481,8 +515,8 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
               </div>
 
               {assetCodes.length > 1 && (
-                <div>
-                  <label className="block text-sm font-bold text-ink mb-2">Asset</label>
+                <fieldset>
+                  <legend className="block text-sm font-bold text-ink mb-2">Asset</legend>
                   <div className="grid grid-cols-2 gap-2">
                     {assetCodes.map((code) => (
                       <button
@@ -493,6 +527,7 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
                             setBalance(await loadAssetBalance(userAddress, code));
                           }
                         }}
+                        aria-pressed={assetCode === code}
                         className={`btn-brutal text-sm px-0 py-2 ${
                           assetCode === code ? 'btn-brutal-primary' : 'btn-brutal-white'
                         }`}
@@ -501,12 +536,15 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
                       </button>
                     ))}
                   </div>
-                </div>
+                </fieldset>
               )}
 
               <div>
-                <label className="block text-sm font-bold text-ink mb-2">Amount ({assetCode})</label>
+                <label htmlFor="donation-amount" className="block text-sm font-bold text-ink mb-2">
+                  Amount ({assetCode})
+                </label>
                 <input
+                  id="donation-amount"
                   type="number"
                   min="0.1"
                   step="0.1"
@@ -531,16 +569,19 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-ink mb-2">Message (Optional)</label>
+                <label htmlFor="donation-message" className="block text-sm font-bold text-ink mb-2">
+                  Message (Optional)
+                </label>
                 <textarea
+                  id="donation-message"
                   value={donationMessage}
                   onChange={(e) => setDonationMessage(e.target.value)}
-                  maxLength={28}
+                  maxLength={140}
                   placeholder="Thanks for your work!"
                   className="input-brutal text-sm"
                   rows={3}
                 />
-                <p className="text-xs text-muted mt-1 font-medium">{donationMessage.length}/28</p>
+                <p className="text-xs text-muted mt-1 font-medium">{donationMessage.length}/140</p>
               </div>
 
               <div className="flex items-center justify-between gap-3">
@@ -579,6 +620,14 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
                   </div>
                 )}
               </div>
+
+              {recurring && (
+                <p className="text-xs text-muted font-medium -mt-2">
+                  You&apos;ll sign once to approve up to 12 charges in advance, so you&apos;re
+                  not re-signing every {intervalChoice === '7' ? 'week' : intervalChoice === '30' ? 'month' : 'period'}.
+                  Cancel anytime from Subscriptions.
+                </p>
+              )}
 
               <button
                 onClick={recurring ? handleStartSubscription : handleSendDonation}

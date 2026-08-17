@@ -23,6 +23,9 @@ router.get(
         ...(creatorUsername ? { creator: { username: creatorUsername } } : {}),
         ...(supporterAddress ? { supporterAddress } : {}),
       },
+      include: {
+        creator: { select: { username: true, displayName: true, avatarUrl: true } },
+      },
     });
 
     return res.json(subscriptions);
