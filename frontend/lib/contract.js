@@ -9,6 +9,15 @@ const NETWORK_PASSPHRASE = StellarSdk.Networks.TESTNET;
 // Stellar's network targets a ~5s ledger close time; used only to translate
 // a subscription's charge interval into an approval expiration window.
 const APPROX_SECONDS_PER_LEDGER = 5;
+// Soroban enforces a network-wide max ledger-entry TTL of 3,110,400 ledgers —
+// an approve() call's live_until_ledger can never be set further out than
+// that from the current ledger, no matter how many periods we'd like to
+// pre-approve. At ~5s/ledger that's 180 days; a single charge interval can
+// never exceed this either, since even one period's allowance must fit.
+export const MAX_TTL_LEDGERS = 3_110_400;
+export const MAX_CHARGE_INTERVAL_DAYS = Math.floor(
+  (MAX_TTL_LEDGERS * APPROX_SECONDS_PER_LEDGER) / 86400
+);
 
 const server = new StellarSdk.rpc.Server(RPC_URL);
 
@@ -205,18 +214,21 @@ export async function sendDonation({ donorAddress, creatorAddress, amount, asset
 /**
  * Grants the donation contract a SAC allowance so `charge_subscription` can
  * later draw `amount` per interval via `transfer_from`, without a fresh
- * wallet signature for every charge. Approves enough for `periodsToApprove`
- * charges at once (default 12); once it runs low the supporter can approve
- * again from the Subscriptions page.
+ * wallet signature for every charge. Approves enough for up to
+ * `periodsToApprove` charges at once (default 12), but never sets the
+ * allowance's expiration further out than Soroban's network-wide max TTL
+ * (`MAX_TTL_LEDGERS`) — for long intervals (e.g. monthly) that means fewer
+ * than `periodsToApprove` periods get pre-approved; once it runs low the
+ * supporter can approve again from the Subscriptions page.
  *
  * @param {object} params
  * @param {string} params.supporterAddress
  * @param {string|number} params.amount amount charged per interval, in whole units
  * @param {string} [params.assetCode] 'XLM' (default) or 'USDC'
  * @param {number} params.intervalSecs seconds between charges
- * @param {number} [params.periodsToApprove] how many charges' worth of allowance to grant (default 12)
+ * @param {number} [params.periodsToApprove] how many charges' worth of allowance to aim for (default 12, may be reduced to fit the network's max TTL)
  * @param {(status: string) => void} [params.onStatus]
- * @returns {Promise<{ hash: string }>}
+ * @returns {Promise<{ hash: string, periodsApproved: number }>}
  */
 export async function approveAllowance({
   supporterAddress,
@@ -239,6 +251,14 @@ export async function approveAllowance({
     );
   }
 
+  const maxTtlSeconds = MAX_TTL_LEDGERS * APPROX_SECONDS_PER_LEDGER;
+  if (intervalSecs > maxTtlSeconds) {
+    throw new DonationError(
+      'simulation',
+      `The charge interval is too long — Stellar allows at most ${MAX_CHARGE_INTERVAL_DAYS} days between charges.`
+    );
+  }
+
   let latestLedger;
   try {
     ({ sequence: latestLedger } = await server.getLatestLedger());
@@ -246,9 +266,14 @@ export async function approveAllowance({
     throw new DonationError('network', 'Could not read the current ledger from the network.', err);
   }
 
+  // Never pre-approve further out than the network's max TTL, even if that
+  // means fewer than `periodsToApprove` periods' worth of runway.
+  const maxPeriods = Math.floor(maxTtlSeconds / intervalSecs);
+  const periodsApproved = Math.max(1, Math.min(periodsToApprove, maxPeriods));
+
   const expirationLedger =
-    latestLedger + Math.ceil((intervalSecs * periodsToApprove) / APPROX_SECONDS_PER_LEDGER);
-  const amountStroops = toStroops(amount, periodsToApprove);
+    latestLedger + Math.ceil((intervalSecs * periodsApproved) / APPROX_SECONDS_PER_LEDGER);
+  const amountStroops = toStroops(amount, periodsApproved);
 
   const { hash } = await callContract({
     contractId: tokenId,
@@ -263,7 +288,7 @@ export async function approveAllowance({
     onStatus,
   });
 
-  return { hash };
+  return { hash, periodsApproved };
 }
 
 /**

@@ -7,7 +7,13 @@ import { toast } from 'sonner';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { PartyIcon } from '@hugeicons/core-free-icons';
 import { connectWallet } from '@/lib/wallet';
-import { sendDonation, approveAllowance, subscribe, DonationError } from '@/lib/contract';
+import {
+  sendDonation,
+  approveAllowance,
+  subscribe,
+  DonationError,
+  MAX_CHARGE_INTERVAL_DAYS,
+} from '@/lib/contract';
 import { availableAssetCodes, getAsset } from '@/lib/assets';
 import { getPlatform } from '@/lib/socials';
 import { API_URL } from '@/lib/api';
@@ -279,6 +285,12 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
     const intervalSecs = Math.round(parseFloat(intervalDays) * 86400);
     if (!intervalSecs || intervalSecs <= 0) {
       toast.error('Enter a valid interval in days');
+      return;
+    }
+    if (intervalSecs > MAX_CHARGE_INTERVAL_DAYS * 86400) {
+      toast.error('Interval too long', {
+        description: `Stellar allows at most ${MAX_CHARGE_INTERVAL_DAYS} days between charges.`,
+      });
       return;
     }
 
@@ -610,10 +622,12 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
                       <input
                         type="number"
                         min="1"
+                        max={MAX_CHARGE_INTERVAL_DAYS}
                         step="1"
                         value={customDays}
                         onChange={(e) => setCustomDays(e.target.value)}
                         aria-label="Days between charges"
+                        title={`Up to ${MAX_CHARGE_INTERVAL_DAYS} days`}
                         className="input-brutal text-sm py-1.5 w-14"
                       />
                     )}
@@ -623,8 +637,9 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
 
               {recurring && (
                 <p className="text-xs text-muted font-medium -mt-2">
-                  You&apos;ll sign once to approve up to 12 charges in advance, so you&apos;re
-                  not re-signing every {intervalChoice === '7' ? 'week' : intervalChoice === '30' ? 'month' : 'period'}.
+                  You&apos;ll sign once to approve several charges in advance (fewer for longer
+                  intervals), so you&apos;re not re-signing every{' '}
+                  {intervalChoice === '7' ? 'week' : intervalChoice === '30' ? 'month' : 'period'}.
                   Cancel anytime from Subscriptions.
                 </p>
               )}
