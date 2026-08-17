@@ -15,10 +15,6 @@ import { useAuth } from '@/context/AuthContext';
 import { Skeleton } from '@/components/Skeleton';
 import { TipJarLoader } from '@/components/TipJarLoader';
 
-const INTERVAL_PRESETS = [
-  { label: 'Weekly', days: 7 },
-  { label: 'Monthly', days: 30 },
-];
 
 const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const server = new StellarSdk.Horizon.Server(HORIZON_URL);
@@ -74,8 +70,11 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
   const [txStatus, setTxStatus] = useState<string | null>(null);
 
   const [recurring, setRecurring] = useState(false);
-  const [intervalDays, setIntervalDays] = useState('30');
+  const [intervalChoice, setIntervalChoice] = useState<'7' | '30' | 'custom'>('30');
+  const [customDays, setCustomDays] = useState('14');
   const [subscribeStep, setSubscribeStep] = useState<string | null>(null);
+
+  const intervalDays = intervalChoice === 'custom' ? customDays : intervalChoice;
 
   const presets = ['1', '5', '10', '20'];
 
@@ -458,12 +457,9 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
           {sending ? (
             <div className="py-2">
               <TipJarLoader fullScreen={false} />
-              {subscribeStep && (
-                <p className="text-sm text-ink text-center font-bold mt-2">{subscribeStep}</p>
-              )}
-              {txStatus && STATUS_LABELS[txStatus] && (
+              {(subscribeStep || (txStatus && STATUS_LABELS[txStatus])) && (
                 <p className="text-sm text-ink text-center animate-pulse font-bold mt-2">
-                  {STATUS_LABELS[txStatus]}
+                  {subscribeStep ?? STATUS_LABELS[txStatus as string]}
                 </p>
               )}
             </div>
@@ -547,49 +543,42 @@ export default function CreatorProfilePage({ params }: { params: Promise<{ usern
                 <p className="text-xs text-muted mt-1 font-medium">{donationMessage.length}/28</p>
               </div>
 
-              <label className="flex items-center gap-2 text-sm font-bold text-ink">
-                <input
-                  type="checkbox"
-                  checked={recurring}
-                  onChange={(e) => setRecurring(e.target.checked)}
-                  className="h-4 w-4 accent-primary"
-                />
-                Make it recurring
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-sm font-bold text-ink">
+                  <input
+                    type="checkbox"
+                    checked={recurring}
+                    onChange={(e) => setRecurring(e.target.checked)}
+                    className="h-4 w-4 accent-primary"
+                  />
+                  Make it recurring
+                </label>
 
-              {recurring && (
-                <div className="card-brutal bg-accent-bg p-3 space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    {INTERVAL_PRESETS.map((preset) => (
-                      <button
-                        key={preset.label}
-                        type="button"
-                        onClick={() => setIntervalDays(String(preset.days))}
-                        className={`btn-brutal text-sm px-0 py-2 ${
-                          intervalDays === String(preset.days) ? 'btn-brutal-primary' : 'btn-brutal-white'
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
+                {recurring && (
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={intervalChoice}
+                      onChange={(e) => setIntervalChoice(e.target.value as typeof intervalChoice)}
+                      className="input-brutal text-sm py-1.5 w-auto"
+                    >
+                      <option value="7">Weekly</option>
+                      <option value="30">Monthly</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    {intervalChoice === 'custom' && (
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={customDays}
+                        onChange={(e) => setCustomDays(e.target.value)}
+                        aria-label="Days between charges"
+                        className="input-brutal text-sm py-1.5 w-14"
+                      />
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-bold text-ink mb-1">Every N days</label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={intervalDays}
-                      onChange={(e) => setIntervalDays(e.target.value)}
-                      className="input-brutal"
-                    />
-                  </div>
-                  <p className="text-xs text-ink/70 font-medium">
-                    You&apos;ll approve two transactions: one granting an allowance, one starting the
-                    subscription. You can cancel anytime from your Subscriptions page.
-                  </p>
-                </div>
-              )}
+                )}
+              </div>
 
               <button
                 onClick={recurring ? handleStartSubscription : handleSendDonation}

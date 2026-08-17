@@ -101,46 +101,33 @@ function SubscriptionsList() {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {subscriptions.map((subscription) => (
-              <div key={subscription.id} className="card-brutal p-5 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-lg font-extrabold text-ink">
-                      {subscription.amount} {subscription.token}
-                    </p>
-                    <p className="text-sm text-muted font-medium">
-                      {formatInterval(subscription.intervalSecs)}
-                    </p>
-                  </div>
-                  <span
-                    className={`btn-brutal text-xs px-2 py-1 ${
-                      subscription.active ? 'btn-brutal-lime' : 'btn-brutal-white'
-                    }`}
-                  >
-                    {subscription.active ? 'Active' : 'Cancelled'}
-                  </span>
-                </div>
-
-                {subscription.active && (
-                  <p className="text-xs text-muted font-medium">
-                    Next charge: {new Date(subscription.nextChargeAt).toLocaleDateString()}
+              <div key={subscription.id} className="card-brutal p-4 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-extrabold text-ink truncate">
+                    {subscription.amount} {subscription.token}{' '}
+                    <span className="text-muted font-medium">· {formatInterval(subscription.intervalSecs)}</span>
                   </p>
-                )}
-
-                {subscription.lastError && (
-                  <div className="card-brutal bg-brand-pink p-2 text-xs font-bold text-ink">
-                    Last charge failed: {subscription.lastError}
-                  </div>
-                )}
+                  <p className="text-xs text-muted font-medium mt-0.5">
+                    {subscription.active
+                      ? `Next charge ${new Date(subscription.nextChargeAt).toLocaleDateString()}`
+                      : 'Cancelled'}
+                  </p>
+                  {subscription.lastError && (
+                    <p className="text-xs text-red-600 font-bold mt-0.5">
+                      Last charge failed — {subscription.lastError}
+                    </p>
+                  )}
+                </div>
 
                 {subscription.active && (
                   <button
                     onClick={() => handleCancel(subscription)}
                     disabled={cancellingId === subscription.id}
-                    className="btn-brutal btn-brutal-white w-full text-sm"
+                    className="text-sm font-bold text-ink/60 hover:text-ink underline underline-offset-2 shrink-0"
                   >
-                    {cancellingId === subscription.id ? 'Cancelling…' : 'Cancel subscription'}
+                    {cancellingId === subscription.id ? 'Cancelling…' : 'Cancel'}
                   </button>
                 )}
               </div>
