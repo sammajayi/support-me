@@ -19,3 +19,7 @@ backend/dist
 *.env
 frontend/.env.local
 backend/.env
+
+# Demo seed accounts (contains wallet private keys)
+backend/scripts
+

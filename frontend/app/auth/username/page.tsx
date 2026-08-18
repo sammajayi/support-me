@@ -86,7 +86,7 @@ export default function CreateUsernamePage() {
                 </label>
                 <div className="flex items-center">
                   <span className="text-muted px-4 py-3 bg-accent-bg border-2 border-r-0 border-ink rounded-l-xl text-sm font-bold">
-                    supportme.app/
+                    support-mee.vercel.app/
                   </span>
                   <input
                     type="text"

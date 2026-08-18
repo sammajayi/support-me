@@ -66,7 +66,7 @@ const STEPS = [
   },
   {
     title: 'Share Your Link',
-    body: 'Get your unique profile link (supportme.app/yourname) and share it with your community, fans, or on social media.',
+    body: 'Get your unique profile link (support-mee.vercel.app/yourname) and share it with your community, fans, or on social media.',
   },
   {
     title: 'Get Tipped, Then Cash Out',
@@ -125,6 +125,10 @@ export default function Home() {
           </div>
         </div>
       </nav>
+
+      <div className="w-full bg-ink text-background text-center py-2 px-4 text-xs sm:text-sm font-bold">
+        Running on Stellar Testnet — no real funds are used. This is a demo.
+      </div>
 
       {/* Hero Section */}
       <section className="pt-20 pb-20 px-4 sm:px-6 lg:px-8">
@@ -281,17 +285,26 @@ export default function Home() {
             <div>
               <h4 className="text-background font-extrabold mb-4">Community</h4>
               <ul className="space-y-2 text-sm text-background/70 font-medium">
-                <li><a href="#" className="hover:text-brand-yellow transition">Documentation</a></li>
-                <li><a href="#" className="hover:text-brand-yellow transition">GitHub</a></li>
-                <li><a href="#" className="hover:text-brand-yellow transition">Discord</a></li>
+                <li>
+                  <a
+                    href="https://github.com/sammajayi/support-me"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-brand-yellow transition"
+                  >
+                    GitHub
+                  </a>
+                </li>
+                <li className="text-background/40 cursor-default">Documentation (soon)</li>
+                <li className="text-background/40 cursor-default">Discord (soon)</li>
               </ul>
             </div>
             <div>
               <h4 className="text-background font-extrabold mb-4">Legal</h4>
               <ul className="space-y-2 text-sm text-background/70 font-medium">
-                <li><a href="#" className="hover:text-brand-yellow transition">Privacy</a></li>
-                <li><a href="#" className="hover:text-brand-yellow transition">Terms</a></li>
-                <li><a href="#" className="hover:text-brand-yellow transition">Contact</a></li>
+                <li className="text-background/40 cursor-default">Privacy (soon)</li>
+                <li className="text-background/40 cursor-default">Terms (soon)</li>
+                <li className="text-background/40 cursor-default">Contact (soon)</li>
               </ul>
             </div>
           </div>

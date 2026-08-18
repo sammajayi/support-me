@@ -83,6 +83,7 @@ export default function AdminPage() {
         setLoading(false);
         return;
       }
+      setLoading(true);
       try {
         const res = await fetch(`${API_URL}/api/admin/overview`, {
           headers: { Authorization: `Bearer ${token}` },
