@@ -36,6 +36,35 @@ describe("GET /api/creators", () => {
   });
 });
 
+describe("GET /api/creators/me", () => {
+  const token = generateToken(1, "GUSERADDRESS");
+
+  it("rejects requests without an auth token", async () => {
+    const res = await request(app).get("/api/creators/me");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 when the authenticated user has no creator profile", async () => {
+    mockedPrisma.creator.findUnique.mockResolvedValue(null);
+
+    const res = await request(app).get("/api/creators/me").set("Authorization", `Bearer ${token}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe("NOT_FOUND");
+  });
+
+  it("returns only the authenticated user's own creator profile", async () => {
+    const creator = { id: 5, userId: 1, username: "bob" };
+    mockedPrisma.creator.findUnique.mockResolvedValue(creator);
+
+    const res = await request(app).get("/api/creators/me").set("Authorization", `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(creator);
+    expect(mockedPrisma.creator.findUnique).toHaveBeenCalledWith({ where: { userId: 1 } });
+  });
+});
+
 describe("GET /api/creators/:username", () => {
   it("returns the creator when found", async () => {
     const creator = { id: 1, username: "bob", donations: [] };

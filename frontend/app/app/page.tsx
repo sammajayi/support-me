@@ -59,12 +59,16 @@ export default function AppHubPage() {
     const fetchCreator = async () => {
       if (!user || !token) return;
       try {
-        const res = await fetch(`${API_URL}/api/creators`, {
+        const res = await fetch(`${API_URL}/api/creators/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (res.status === 404) {
+          // Signed in, but hasn't finished claiming a username yet.
+          setCreator(null);
+          return;
+        }
         if (!res.ok) throw new Error('Failed to load your profile');
-        const creators: Creator[] = await res.json();
-        setCreator(creators.find((c) => c.userId === user.id) || null);
+        setCreator(await res.json());
       } catch (err) {
         toast.error('Could not load your profile', {
           description: (err as Error).message,

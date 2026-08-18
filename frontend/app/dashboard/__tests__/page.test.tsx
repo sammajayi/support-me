@@ -89,8 +89,8 @@ const withdrawal = {
   createdAt: '2026-01-02T00:00:00.000Z',
 };
 
-function jsonResponse(body: unknown, ok = true) {
-  return { ok, json: async () => body } as Response;
+function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 400) {
+  return { ok, status, json: async () => body } as Response;
 }
 
 // Route fetch by URL rather than call order. The dashboard now also fires
@@ -98,11 +98,13 @@ function jsonResponse(body: unknown, ok = true) {
 // consumed by the prices call. Any unmatched URL (including /api/prices)
 // resolves to an empty-ish payload.
 function mockFetchByUrl({
-  creators,
+  creator,
+  creatorNotFound = false,
   donations,
   withdrawals,
 }: {
-  creators?: unknown;
+  creator?: unknown;
+  creatorNotFound?: boolean;
   donations?: unknown;
   withdrawals?: unknown;
 }) {
@@ -111,7 +113,12 @@ function mockFetchByUrl({
     // Check withdrawals before creators: both contain no overlapping substring,
     // but keep the donations/withdrawals checks ahead of the bare /api/creators.
     if (url.includes('/api/withdrawals')) return Promise.resolve(jsonResponse(withdrawals ?? []));
-    if (url.includes('/api/creators')) return Promise.resolve(jsonResponse(creators ?? []));
+    if (url.includes('/api/creators/me')) {
+      if (creatorNotFound) {
+        return Promise.resolve(jsonResponse({ error: 'Creator not found' }, false, 404));
+      }
+      return Promise.resolve(jsonResponse(creator ?? null));
+    }
     if (url.includes('/api/donations')) return Promise.resolve(jsonResponse(donations ?? []));
     return Promise.resolve(jsonResponse({ prices: {} }));
   });
@@ -145,7 +152,7 @@ describe('DashboardPage', () => {
   });
 
   it('renders volume split and recent donations once data has loaded', async () => {
-    mockFetchByUrl({ creators: [creator], donations: [donation] });
+    mockFetchByUrl({ creator, donations: [donation] });
 
     render(<DashboardPage />);
 
@@ -163,7 +170,7 @@ describe('DashboardPage', () => {
   });
 
   it('renders withdrawals in the activity feed and the withdrawn total', async () => {
-    mockFetchByUrl({ creators: [creator], donations: [donation], withdrawals: [withdrawal] });
+    mockFetchByUrl({ creator, donations: [donation], withdrawals: [withdrawal] });
 
     render(<DashboardPage />);
 
@@ -183,7 +190,7 @@ describe('DashboardPage', () => {
   });
 
   it('prompts profile creation when the user has no creator profile yet', async () => {
-    mockFetchByUrl({ creators: [] });
+    mockFetchByUrl({ creatorNotFound: true });
 
     render(<DashboardPage />);
 
@@ -193,7 +200,7 @@ describe('DashboardPage', () => {
   });
 
   it('prepends a new donation received over SSE and shows a toast', async () => {
-    mockFetchByUrl({ creators: [creator], donations: [donation] });
+    mockFetchByUrl({ creator, donations: [donation] });
 
     render(<DashboardPage />);
 

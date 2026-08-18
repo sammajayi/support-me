@@ -25,6 +25,23 @@ router.get(
 );
 
 router.get(
+  "/me",
+  authMiddleware as any,
+  asyncHandler(async (req: AuthRequest, res) => {
+    if (!req.user) {
+      throw new UnauthorizedError("User not authenticated");
+    }
+
+    const creator = await prisma.creator.findUnique({ where: { userId: req.user.id } });
+    if (!creator) {
+      throw new NotFoundError("Creator not found");
+    }
+
+    return res.json(creator);
+  })
+);
+
+router.get(
   "/:username",
   validate({ params: usernameParamSchema }),
   asyncHandler(async (req, res) => {

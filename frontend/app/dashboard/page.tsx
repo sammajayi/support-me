@@ -68,24 +68,21 @@ export default function DashboardPage() {
       if (!user || !token) return;
 
       try {
-        const resCreators = await fetch(`${API_URL}/api/creators`, {
+        const resCreator = await fetch(`${API_URL}/api/creators/me`, {
           headers: { 'Authorization': `Bearer ${token}` },
         });
 
-        if (!resCreators.ok) {
-          throw new Error('Failed to fetch creators');
-        }
-
-        const creators: Creator[] = await resCreators.json();
-        const userCreator = creators.find((c: Creator) => c.userId === user.id);
-
-        if (!userCreator) {
+        if (resCreator.status === 404) {
           // User hasn't created profile yet
           setCreator(null);
           setLoading(false);
           return;
         }
+        if (!resCreator.ok) {
+          throw new Error('Failed to fetch your creator profile');
+        }
 
+        const userCreator: Creator = await resCreator.json();
         setCreator(userCreator);
 
         const [resDonations, resWithdrawals] = await Promise.all([
