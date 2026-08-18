@@ -33,6 +33,10 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Tracks edits made via the form's own onChange handlers only — never set
+  // by the initial fetchCreator population — so we can warn before an
+  // accidental tab close/refresh loses unsaved changes.
+  const [dirty, setDirty] = useState(false);
 
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
@@ -50,22 +54,20 @@ export default function SettingsPage() {
     const fetchCreator = async () => {
       if (!user || !token) return;
       try {
-        const res = await fetch(`${API_URL}/api/creators`, {
+        const res = await fetch(`${API_URL}/api/creators/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (res.status === 404) return;
         if (!res.ok) throw new Error('Failed to load your profile');
-        const creators: Creator[] = await res.json();
-        const mine = creators.find((c) => c.userId === user.id) || null;
-        if (mine) {
-          setCreator(mine);
-          setDisplayName(mine.displayName || '');
-          setBio(mine.bio || '');
-          setAvatarUrl(mine.avatarUrl || '');
-          setAcceptsXlm(mine.acceptsXlm ?? true);
-          setAcceptsUsdc(mine.acceptsUsdc ?? true);
-          setDonationGoal(mine.donationGoal != null ? String(mine.donationGoal) : '');
-          setSocials(mine.socialLinks || {});
-        }
+        const mine: Creator = await res.json();
+        setCreator(mine);
+        setDisplayName(mine.displayName || '');
+        setBio(mine.bio || '');
+        setAvatarUrl(mine.avatarUrl || '');
+        setAcceptsXlm(mine.acceptsXlm ?? true);
+        setAcceptsUsdc(mine.acceptsUsdc ?? true);
+        setDonationGoal(mine.donationGoal != null ? String(mine.donationGoal) : '');
+        setSocials(mine.socialLinks || {});
       } catch (err) {
         toast.error('Could not load settings', { description: (err as Error).message });
       } finally {
@@ -74,6 +76,19 @@ export default function SettingsPage() {
     };
     fetchCreator();
   }, [user, token]);
+
+  // Warn before an accidental tab close/refresh discards unsaved edits. This
+  // only covers browser-level navigation, not in-app Link clicks — the App
+  // Router has no built-in route-change interceptor for that.
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
 
   const handleFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,6 +100,7 @@ export default function SettingsPage() {
     try {
       const url = await uploadAvatar(file);
       setAvatarUrl(url);
+      setDirty(true);
       toast.success('Avatar uploaded — save to keep it.');
     } catch (err) {
       const description = err instanceof UploadError ? err.message : (err as Error).message;
@@ -146,6 +162,7 @@ export default function SettingsPage() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || 'Failed to save changes');
       }
+      setDirty(false);
       toast.success('Settings saved.');
     } catch (err) {
       toast.error('Could not save settings', { description: (err as Error).message });
@@ -249,7 +266,10 @@ export default function SettingsPage() {
                   id="displayName"
                   type="text"
                   value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
+                  onChange={(e) => {
+                    setDisplayName(e.target.value);
+                    setDirty(true);
+                  }}
                   maxLength={80}
                   placeholder={creator.username}
                   className="input-brutal"
@@ -263,7 +283,10 @@ export default function SettingsPage() {
                 <textarea
                   id="bio"
                   value={bio}
-                  onChange={(e) => setBio(e.target.value)}
+                  onChange={(e) => {
+                    setBio(e.target.value);
+                    setDirty(true);
+                  }}
                   maxLength={500}
                   rows={4}
                   placeholder="Tell supporters what you're about."
@@ -283,7 +306,10 @@ export default function SettingsPage() {
                 <input
                   type="checkbox"
                   checked={acceptsXlm}
-                  onChange={(e) => setAcceptsXlm(e.target.checked)}
+                  onChange={(e) => {
+                    setAcceptsXlm(e.target.checked);
+                    setDirty(true);
+                  }}
                   className="w-5 h-5 accent-primary"
                 />
               </label>
@@ -292,14 +318,17 @@ export default function SettingsPage() {
                 <input
                   type="checkbox"
                   checked={acceptsUsdc}
-                  onChange={(e) => setAcceptsUsdc(e.target.checked)}
+                  onChange={(e) => {
+                    setAcceptsUsdc(e.target.checked);
+                    setDirty(true);
+                  }}
                   className="w-5 h-5 accent-primary"
                 />
               </label>
 
               <div>
                 <label htmlFor="donationGoal" className="block text-sm font-bold text-ink mb-2">
-                  Monthly goal (XLM, optional)
+                  Monthly goal ({acceptsXlm ? 'XLM' : 'USDC'}, optional)
                 </label>
                 <input
                   id="donationGoal"
@@ -307,7 +336,10 @@ export default function SettingsPage() {
                   min={1}
                   step={1}
                   value={donationGoal}
-                  onChange={(e) => setDonationGoal(e.target.value)}
+                  onChange={(e) => {
+                    setDonationGoal(e.target.value);
+                    setDirty(true);
+                  }}
                   placeholder="e.g. 1000"
                   className="input-brutal"
                 />
@@ -330,7 +362,10 @@ export default function SettingsPage() {
                       type="text"
                       aria-label={platform.label}
                       value={socials[platform.key] || ''}
-                      onChange={(e) => setSocials((prev) => ({ ...prev, [platform.key]: e.target.value }))}
+                      onChange={(e) => {
+                        setSocials((prev) => ({ ...prev, [platform.key]: e.target.value }));
+                        setDirty(true);
+                      }}
                       placeholder={platform.label}
                       className="input-brutal pl-11"
                     />
